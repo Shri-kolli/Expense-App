@@ -81,7 +81,17 @@
 - ✅ Confirmation dialog
 - ✅ Immediate removal
 
-### 5. Monthly Summary & Carryover 📅
+### 5. Household Todo List ✅
+
+- ✅ Shared Hubby and Wifey lists, with up to 6 tasks per person per day
+- ✅ Choose today, a past date, or a future date; the calendar opens tasks for the selected day
+- ✅ Mark tasks open, half done, or completed with clear visual status colors
+- ✅ Marking a task half done offers an editable continuation task on a chosen date; it is never carried forward automatically
+- ✅ Optional, initially hidden checkpoints with up to 5 per task
+- ✅ Previous-month reward summary: ₹100 × completed tasks ÷ that person's total tasks, when that person had at least 4 tasks that day
+- ✅ Reward is displayed only and is not added to expense or income transactions
+
+### 6. Monthly Summary & Carryover 📅
 
 **Automatic Calculations**
 - ✅ Monthly income total
@@ -95,7 +105,7 @@
 - ✅ Historical summaries preserved
 - ✅ Auto-updates on transaction changes
 
-### 6. Data Management 💾
+### 7. Data Management 💾
 
 **CRUD Operations**
 - ✅ Create transactions

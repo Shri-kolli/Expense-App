@@ -34,6 +34,8 @@ aws configure
 - ✅ **Carryover Balance** - Automatic month-to-month balance tracking
 - ✅ **Transaction History** - View, filter, edit, and delete any transaction
 - ✅ **Monthly Summaries** - Automatic calculation of monthly totals
+- ✅ **Household Todo List** - Shared daily lists, optional checkpoints, calendar history/planning, and previous-month rewards
+- Todo rewards are calculated on the Todo page only (₹100 × completed tasks ÷ that person's tasks, minimum 4 tasks that day); they never change expense or income transactions.
 
 ### Your Pre-configured Categories
 

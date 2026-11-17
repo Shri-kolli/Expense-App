@@ -22,6 +22,7 @@
             <h1>💰 Personal Expense Tracker</h1>
             <div class="header-info">
                 <span id="currentMonth"></span>
+                <button type="button" class="tab-btn todo-shortcut" data-tab="todos">✓ Todo</button>
                 <button type="button" class="btn sign-out-btn" onclick="signOut()">Sign out</button>
             </div>
         </header>
@@ -82,6 +83,64 @@
                 <div id="recentTransactionsList"></div>
             </div>
         </div>
+
+        <section id="todos" class="tab-content">
+            <section class="todo-reward-card" aria-label="This month's rewards">
+                <h2 id="todoRewardMonth">Nov rewards</h2>
+                <div class="todo-reward-breakdown" id="todoRewardBreakdown"></div>
+            </section>
+
+            <section class="todo-day-panel" aria-labelledby="todoDayTitle">
+                <div class="todo-day-heading">
+                    <div>
+                        <h2 id="todoDayTitle"></h2>
+                    </div>
+                    <label class="todo-date-picker" for="todoDate">
+                        Choose a day
+                        <input type="date" id="todoDate">
+                    </label>
+                </div>
+
+                <div id="todoTasksList" class="todo-task-groups"></div>
+
+                <form id="todoForm" class="todo-add-form">
+                    <h3 class="todo-add-title">What needs doing?</h3>
+                    <div class="todo-add-fields">
+                        <label class="todo-task-field" for="todoTitle">
+                            <span class="sr-only">Task</span>
+                            <input type="text" id="todoTitle" maxlength="160" required
+                                   placeholder="Add one small, doable task">
+                        </label>
+                        <label for="todoOwner">
+                            Add to
+                            <select id="todoOwner" required>
+                                <option value="hubby">Hubby's tasks</option>
+                                <option value="wifey">Wifey's tasks</option>
+                            </select>
+                        </label>
+                        <button type="submit" class="btn btn-primary todo-add-button">Add task</button>
+                    </div>
+                    <p class="todo-muted">Up to 6 tasks per person each day. Pick a future date above to plan ahead.</p>
+                    <p id="todoMessage" class="todo-message" role="status" hidden></p>
+                </form>
+            </section>
+
+            <section class="todo-calendar-section" aria-labelledby="todoCalendarTitle">
+                <div class="todo-calendar-heading">
+                    <h2 id="todoCalendarTitle">Your Todo calendar</h2>
+                    <div class="calendar-month-controls">
+                        <button id="todoPreviousMonth" class="calendar-nav" type="button" aria-label="Previous month">‹</button>
+                        <span id="todoCalendarMonthLabel"></span>
+                        <button id="todoNextMonth" class="calendar-nav" type="button" aria-label="Next month">›</button>
+                    </div>
+                </div>
+                <div class="calendar-weekdays" aria-hidden="true">
+                    <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span>
+                    <span>Fri</span><span>Sat</span><span>Sun</span>
+                </div>
+                <div id="todoCalendar" class="todo-calendar" role="grid" aria-label="Todo days"></div>
+            </section>
+        </section>
 
         <!-- Add Transaction Tab -->
         <div id="add-transaction" class="tab-content">
@@ -253,6 +312,28 @@
                 <div class="modal-actions">
                     <button type="submit" class="btn btn-primary">Update</button>
                     <button type="button" onclick="closeEditTransactionModal()" class="btn">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="halfDoneModal" class="modal">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="halfDoneTitle">
+            <button type="button" class="close" id="closeHalfDoneModal" aria-label="Close">&times;</button>
+            <h2 id="halfDoneTitle">Save your progress</h2>
+            <p class="todo-muted">This task stays half done on its original day. Choose when to pick up the rest.</p>
+            <form id="halfDoneForm">
+                <div class="form-group">
+                    <label for="continuationDate">Continue on</label>
+                    <input type="date" id="continuationDate" required>
+                </div>
+                <div class="form-group">
+                    <label for="continuationTitle">Remaining task</label>
+                    <input type="text" id="continuationTitle" maxlength="160" required>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary">Save and add to that day</button>
+                    <button type="button" class="btn" id="cancelHalfDone">Cancel</button>
                 </div>
             </form>
         </div>

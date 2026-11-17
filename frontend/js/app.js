@@ -2,13 +2,18 @@
 let categories = [];
 let currentMonth = new Date().toISOString().slice(0, 7);
 let summaryCarryover = {};
+let selectedTodoDate = getLocalDateString(new Date());
+let todoCalendarMonth = selectedTodoDate.slice(0, 7);
+let todosForCalendar = [];
+let selectedDateTodos = [];
+let pendingHalfDoneTodo = null;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
     if (!await initializeAuthentication()) return;
 
     // Set current month display
-    document.getElementById('currentMonth').textContent = formatMonthDisplay(currentMonth);
+    document.getElementById('currentMonth').textContent = formatHeaderMonth(currentMonth);
 
     // Set default date to today
     document.getElementById('date').valueAsDate = new Date();
@@ -57,6 +62,8 @@ function setupTabs() {
                 loadTransactions();
             } else if (tabName === 'categories') {
                 loadCategoriesPage();
+            } else if (tabName === 'todos') {
+                loadTodoPage();
             }
         });
     });
@@ -95,6 +102,23 @@ function setupForms() {
     document.getElementById('parentCategory').addEventListener('change', updateCategoryFormFields);
     document.getElementById('previousMonth').addEventListener('click', () => changeDashboardMonth(-1));
     document.getElementById('nextMonth').addEventListener('click', () => changeDashboardMonth(1));
+    document.getElementById('todoDate').value = selectedTodoDate;
+    document.getElementById('todoOwner').addEventListener('change', updateTodoAddLimit);
+    document.getElementById('todoDate').addEventListener('change', async (event) => {
+        if (!event.target.value) return;
+        selectedTodoDate = event.target.value;
+        todoCalendarMonth = selectedTodoDate.slice(0, 7);
+        await loadTodoPage();
+    });
+    document.getElementById('todoPreviousMonth').addEventListener('click', () => changeTodoCalendarMonth(-1));
+    document.getElementById('todoNextMonth').addEventListener('click', () => changeTodoCalendarMonth(1));
+    document.getElementById('todoForm').addEventListener('submit', handleAddTodo);
+    document.getElementById('todoTasksList').addEventListener('click', handleTodoAction);
+    document.getElementById('todoTasksList').addEventListener('submit', handleTodoSubtaskSubmit);
+    document.getElementById('todoCalendar').addEventListener('click', handleTodoCalendarClick);
+    document.getElementById('halfDoneForm').addEventListener('submit', handleSaveHalfDone);
+    document.getElementById('closeHalfDoneModal').addEventListener('click', closeHalfDoneModal);
+    document.getElementById('cancelHalfDone').addEventListener('click', closeHalfDoneModal);
 
     // Initial category population
     populateCategoryDropdown('expense');
@@ -136,11 +160,349 @@ async function loadDashboard() {
     }
 }
 
+// ================ HOUSEHOLD TODOS ================
+
+async function loadTodoPage() {
+    const dateInput = document.getElementById('todoDate');
+    dateInput.value = selectedTodoDate;
+    document.getElementById('todoDayTitle').textContent = formatTodoDate(selectedTodoDate);
+    document.getElementById('todoCalendarMonthLabel').textContent =
+        formatMonthDisplay(todoCalendarMonth);
+
+    const [monthData, rewardData] = await Promise.all([
+        getTodosForMonth(todoCalendarMonth),
+        getTodoReward(getLocalDateString(new Date()).slice(0, 7))
+    ]);
+
+    if (!monthData || !Array.isArray(monthData.todos)) return;
+    todosForCalendar = monthData.todos;
+    selectedDateTodos = todosForCalendar.filter(todo => todo.date === selectedTodoDate);
+    renderTodoTasks();
+    renderTodoCalendar();
+    updateTodoAddLimit();
+    if (rewardData) renderTodoReward(rewardData);
+}
+
+function renderTodoReward(reward) {
+    document.getElementById('todoRewardMonth').textContent =
+        `${formatShortMonth(reward.month)} rewards`;
+    document.getElementById('todoRewardBreakdown').innerHTML = `
+        <span class="todo-reward-person todo-reward-wifey"><span>Wifey</span><strong>${formatCurrency(reward.rewards.wifey)}</strong></span>
+        <span class="todo-reward-person todo-reward-hubby"><span>Hubby</span><strong>${formatCurrency(reward.rewards.hubby)}</strong></span>
+    `;
+}
+
+function renderTodoTasks() {
+    const container = document.getElementById('todoTasksList');
+    const owners = [
+        { id: 'wifey', label: 'Wifey', heart: '♡' },
+        { id: 'hubby', label: 'Hubby', heart: '♥' }
+    ];
+    document.getElementById('todoMessage').hidden = true;
+
+    container.innerHTML = owners.map(owner => {
+        const ownerTodos = selectedDateTodos.filter(todo => todo.owner === owner.id);
+        const completed = ownerTodos.filter(todo => todo.status === 'completed').length;
+        const cards = ownerTodos.length
+            ? ownerTodos.map(createTodoCard).join('')
+            : `<p class="todo-empty">Nothing planned yet. Keep it light or add one small win.</p>`;
+        return `
+            <section class="todo-owner-group todo-owner-${owner.id}" aria-labelledby="todo-${owner.id}-title">
+                <div class="todo-owner-heading">
+                    <h3 id="todo-${owner.id}-title">${owner.label} <span aria-hidden="true">${owner.heart}</span></h3>
+                    <span>${completed}/${ownerTodos.length} done · ${ownerTodos.length}/6 tasks</span>
+                </div>
+                <div class="todo-owner-list">${cards}</div>
+            </section>
+        `;
+    }).join('');
+}
+
+function createTodoCard(todo) {
+    const status = ['open', 'half_done', 'completed'].includes(todo.status) ? todo.status : 'open';
+    const subtasks = Array.isArray(todo.subtasks) ? todo.subtasks : [];
+    const statusLabel = status === 'completed' ? 'Done' : status === 'half_done' ? 'Half done' : 'To do';
+    const statusActions = status === 'completed'
+        ? '<button type="button" class="todo-action-button" data-action="reopen">Undo done</button>'
+        : `<button type="button" class="todo-action-button todo-done-button" data-action="complete">✓ Done</button>
+           ${status === 'open'
+                ? '<button type="button" class="todo-action-button todo-half-button" data-action="half-done">Half done</button>'
+                : ''}`;
+    return `
+        <article class="todo-card todo-status-${status}" data-todo-id="${escapeHtml(todo.todoId)}">
+            <div class="todo-card-main">
+                <button type="button" class="todo-task-summary" data-action="expand"
+                        aria-expanded="false">
+                    <span class="todo-status-dot" aria-hidden="true"></span>
+                    <span class="todo-task-title">${escapeHtml(todo.title)}</span>
+                    <span class="todo-status-label">${statusLabel}</span>
+                </button>
+                <div class="todo-details" hidden>
+                    <div class="todo-card-actions">
+                        ${statusActions}
+                        <button type="button" class="todo-action-button todo-delete-button" data-action="delete">Remove</button>
+                    </div>
+                    <p class="todo-checkpoint-heading">Checkpoints <span>${subtasks.length}/5</span></p>
+                    ${subtasks.length
+                        ? `<ul class="todo-subtask-list">${subtasks.map(subtask => `
+                            <li class="${subtask.completed ? 'subtask-completed' : ''}">
+                                <button type="button" data-action="toggle-subtask"
+                                        data-subtask-id="${escapeHtml(subtask.id)}"
+                                        aria-pressed="${Boolean(subtask.completed)}"
+                                        aria-label="${subtask.completed ? 'Uncheck' : 'Complete'} ${escapeHtml(subtask.text)}">
+                                    <span class="todo-checkmark">${subtask.completed ? '✓' : ''}</span>
+                                    <span>${escapeHtml(subtask.text)}</span>
+                                </button>
+                                <button type="button" class="todo-subtask-remove" data-action="remove-subtask"
+                                        data-subtask-id="${escapeHtml(subtask.id)}" aria-label="Remove checkpoint">×</button>
+                            </li>
+                        `).join('')}</ul>`
+                        : '<p class="todo-muted">No checkpoints yet. Add them only if they help.</p>'}
+                    ${subtasks.length < 5 ? `
+                        <form class="todo-subtask-form">
+                            <label class="sr-only" for="subtask-${escapeHtml(todo.todoId)}">Add a checkpoint</label>
+                            <input id="subtask-${escapeHtml(todo.todoId)}" name="subtask"
+                                   maxlength="160" placeholder="Add a checkpoint" required>
+                            <button type="submit" class="btn btn-small">Add</button>
+                        </form>
+                    ` : ''}
+                </div>
+            </div>
+        </article>
+    `;
+}
+
+function renderTodoCalendar() {
+    const [year, monthNumber] = todoCalendarMonth.split('-').map(Number);
+    const firstDay = new Date(year, monthNumber - 1, 1);
+    const daysInMonth = new Date(year, monthNumber, 0).getDate();
+    const offset = (firstDay.getDay() + 6) % 7;
+    const todosByDate = new Map();
+    todosForCalendar.forEach(todo => {
+        todosByDate.set(todo.date, (todosByDate.get(todo.date) || []).concat(todo));
+    });
+
+    const cells = [];
+    for (let blank = 0; blank < offset; blank += 1) {
+        cells.push('<div class="todo-calendar-day todo-calendar-empty" role="presentation"></div>');
+    }
+    for (let day = 1; day <= daysInMonth; day += 1) {
+        const date = `${year}-${String(monthNumber).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        const dayTodos = todosByDate.get(date) || [];
+        const complete = dayTodos.filter(todo => todo.status === 'completed').length;
+        const classes = [
+            'todo-calendar-day',
+            date === selectedTodoDate ? 'selected' : '',
+            dayTodos.length && complete === dayTodos.length ? 'all-done' : '',
+            dayTodos.length && complete < dayTodos.length ? 'has-open-tasks' : ''
+        ].filter(Boolean).join(' ');
+        cells.push(`
+            <button type="button" class="${classes}" data-calendar-date="${date}"
+                    aria-label="${date}, ${dayTodos.length} tasks, ${complete} completed"
+                    aria-pressed="${date === selectedTodoDate}">
+                <span>${day}</span>
+                ${dayTodos.length ? `<small>${complete}/${dayTodos.length}</small>` : ''}
+            </button>
+        `);
+    }
+    document.getElementById('todoCalendar').innerHTML = cells.join('');
+}
+
+async function handleAddTodo(event) {
+    event.preventDefault();
+    const titleInput = document.getElementById('todoTitle');
+    const result = await addTodo({
+        title: titleInput.value,
+        owner: document.getElementById('todoOwner').value,
+        date: selectedTodoDate
+    });
+    if (!result) return;
+    titleInput.value = '';
+    await loadTodoPage();
+    showTodoMessage('Added to the day. You’ve got this!');
+    titleInput.focus();
+}
+
+async function handleTodoAction(event) {
+    const button = event.target.closest('[data-action]');
+    if (!button) return;
+    const card = button.closest('[data-todo-id]');
+    if (!card) return;
+    const todo = selectedDateTodos.find(item => item.todoId === card.dataset.todoId);
+    if (!todo) return;
+
+    const action = button.dataset.action;
+    if (action === 'expand') {
+        const details = card.querySelector('.todo-details');
+        details.hidden = !details.hidden;
+        card.classList.toggle('todo-card-expanded', !details.hidden);
+        button.setAttribute('aria-expanded', String(!details.hidden));
+        return;
+    }
+    if (action === 'half-done') {
+        openHalfDoneModal(todo);
+        return;
+    }
+    if (action === 'delete') {
+        if (!confirm(`Remove "${todo.title}" from this day?`)) return;
+        const result = await deleteTodo({
+            todoId: todo.todoId,
+            date: todo.date,
+            owner: todo.owner
+        });
+        if (result) await loadTodoPage();
+        return;
+    }
+    if (action === 'toggle-subtask' || action === 'remove-subtask') {
+        const subtasks = (todo.subtasks || []).map(subtask => ({ ...subtask }));
+        const index = subtasks.findIndex(item => item.id === button.dataset.subtaskId);
+        if (index < 0) return;
+        if (action === 'toggle-subtask') {
+            subtasks[index].completed = !subtasks[index].completed;
+        } else {
+            subtasks.splice(index, 1);
+        }
+        const result = await updateTodo({ todoId: todo.todoId, date: todo.date, subtasks });
+        if (result) await loadTodoPage();
+        return;
+    }
+
+    const status = action === 'complete' ? 'completed' : action === 'reopen' ? 'open' : null;
+    if (status) {
+        const result = await updateTodo({ todoId: todo.todoId, date: todo.date, status });
+        if (result) await loadTodoPage();
+    }
+}
+
+async function handleTodoSubtaskSubmit(event) {
+    if (!event.target.matches('.todo-subtask-form')) return;
+    event.preventDefault();
+    const card = event.target.closest('[data-todo-id]');
+    const todo = selectedDateTodos.find(item => item.todoId === card?.dataset.todoId);
+    const input = event.target.elements.subtask;
+    const text = input.value.trim();
+    if (!todo || !text) return;
+    const subtasks = [...(todo.subtasks || []), {
+        id: crypto.randomUUID(),
+        text,
+        completed: false
+    }];
+    const result = await updateTodo({ todoId: todo.todoId, date: todo.date, subtasks });
+    if (result) await loadTodoPage();
+}
+
+function openHalfDoneModal(todo) {
+    pendingHalfDoneTodo = todo;
+    document.getElementById('continuationTitle').value = todo.title;
+    document.getElementById('continuationDate').value = addDaysToDate(todo.date, 1);
+    document.getElementById('halfDoneModal').classList.add('active');
+    document.getElementById('continuationTitle').focus();
+}
+
+async function handleSaveHalfDone(event) {
+    event.preventDefault();
+    if (!pendingHalfDoneTodo) return;
+    const continuationDate = document.getElementById('continuationDate').value;
+    const result = await markTodoHalfDone({
+        todoId: pendingHalfDoneTodo.todoId,
+        date: pendingHalfDoneTodo.date,
+        continuationDate,
+        continuationTitle: document.getElementById('continuationTitle').value
+    });
+    if (result) {
+        selectedTodoDate = continuationDate;
+        todoCalendarMonth = continuationDate.slice(0, 7);
+        closeHalfDoneModal();
+        await loadTodoPage();
+        showTodoMessage('Progress saved. The remaining task is on the date you chose.');
+    }
+}
+
+function closeHalfDoneModal() {
+    document.getElementById('halfDoneModal').classList.remove('active');
+    pendingHalfDoneTodo = null;
+}
+
+function handleTodoCalendarClick(event) {
+    const dayButton = event.target.closest('[data-calendar-date]');
+    if (!dayButton) return;
+    selectedTodoDate = dayButton.dataset.calendarDate;
+    document.getElementById('todoDate').value = selectedTodoDate;
+    loadTodoPage();
+}
+
+function changeTodoCalendarMonth(offset) {
+    const [year, month] = todoCalendarMonth.split('-').map(Number);
+    const next = new Date(year, month - 1 + offset, 1);
+    todoCalendarMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
+    selectedTodoDate = `${todoCalendarMonth}-01`;
+    document.getElementById('todoDate').value = selectedTodoDate;
+    loadTodoPage();
+}
+
+function showTodoMessage(message) {
+    const element = document.getElementById('todoMessage');
+    element.textContent = message;
+    element.hidden = false;
+}
+
+function updateTodoAddLimit() {
+    const owner = document.getElementById('todoOwner').value;
+    const count = selectedDateTodos.filter(todo => todo.owner === owner).length;
+    const button = document.querySelector('#todoForm button[type="submit"]');
+    const isFull = count >= 6;
+    button.disabled = isFull;
+    button.textContent = isFull ? 'Daily limit reached' : 'Add task';
+}
+
+function getLocalDateString(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function addDaysToDate(dateString, days) {
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(year, month - 1, day + days);
+    return getLocalDateString(date);
+}
+
+function formatTodoDate(dateString) {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(year, month - 1, day).toLocaleDateString('en-IN', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+    });
+}
+
+function formatShortMonth(monthString) {
+    const [year, month] = monthString.split('-').map(Number);
+    const label = new Date(year, month - 1, 1).toLocaleDateString('en-IN', { month: 'short' });
+    return `${label}-${String(year).slice(-2)}`;
+}
+
+function formatHeaderMonth(monthString) {
+    return formatShortMonth(monthString);
+}
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, character => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    })[character]);
+}
+
 function changeDashboardMonth(offset) {
     const [year, month] = currentMonth.split('-').map(Number);
     const next = new Date(year, month - 1 + offset, 1);
     currentMonth = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}`;
-    document.getElementById('currentMonth').textContent = formatMonthDisplay(currentMonth);
+    document.getElementById('currentMonth').textContent = formatHeaderMonth(currentMonth);
     loadDashboard();
 }
 
@@ -699,11 +1061,15 @@ function formatMonthDisplay(monthString) {
 window.onclick = function(event) {
     const categoryModal = document.getElementById('categoryModal');
     const editModal = document.getElementById('editTransactionModal');
+    const halfDoneModal = document.getElementById('halfDoneModal');
 
     if (event.target === categoryModal) {
         closeCategoryModal();
     }
     if (event.target === editModal) {
         closeEditTransactionModal();
+    }
+    if (event.target === halfDoneModal) {
+        closeHalfDoneModal();
     }
 };

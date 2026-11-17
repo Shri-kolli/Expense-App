@@ -38,7 +38,7 @@ body {
 }
 
 .auth-card p {
-    margin-bottom: 20px;
+    margin: 14px 0 0;
     color: #666;
 }
 
@@ -56,19 +56,19 @@ body {
 header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 30px;
+    padding: 16px 22px;
     border-radius: 10px;
     margin-bottom: 20px;
     box-shadow: 0 4px 6px rgba(0,0,0,0.1);
 }
 
 header h1 {
-    font-size: 2rem;
-    margin-bottom: 10px;
+    font-size: 1.45rem;
+    margin-bottom: 5px;
 }
 
 .header-info {
-    font-size: 1.1rem;
+    font-size: 0.88rem;
     opacity: 0.9;
     display: flex;
     justify-content: space-between;
@@ -77,11 +77,16 @@ header h1 {
 }
 
 .sign-out-btn {
-    padding: 7px 12px;
+    padding: 4px 9px;
     border: 1px solid rgba(255, 255, 255, 0.65);
     background: transparent;
     color: white;
-    font-size: 0.85rem;
+    font-size: 0.74rem;
+}
+
+.sign-out-btn.btn {
+    font-size: 0.74rem;
+    padding: 4px 9px;
 }
 
 .sign-out-btn:hover {
@@ -671,17 +676,17 @@ header h1 {
     }
 
     header {
-        padding: 14px 16px;
+        padding: 12px 14px;
         margin-bottom: 12px;
     }
 
     header h1 {
-        font-size: 1.2rem;
-        margin-bottom: 2px;
+        font-size: 1rem;
+        margin-bottom: 3px;
     }
 
     .header-info {
-        font-size: 0.85rem;
+        font-size: 0.76rem;
     }
 
     .tabs {
@@ -846,4 +851,623 @@ header h1 {
     font-size: 4rem;
     display: block;
     margin-bottom: 20px;
+}
+
+/* Household todos */
+.todo-shortcut {
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    color: #fff;
+    padding: 7px 14px;
+    font: inherit;
+    font-size: 0.88rem;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.todo-shortcut:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.todo-shortcut.tab-btn.active {
+    background: rgba(255, 255, 255, 0.25);
+    border-color: rgba(255, 255, 255, 0.85);
+    color: #fff;
+}
+
+#todos {
+    background:
+        radial-gradient(ellipse at 2% 20%, rgba(255, 222, 236, 0.48), transparent 34%),
+        radial-gradient(ellipse at 98% 56%, rgba(226, 221, 255, 0.46), transparent 38%),
+        linear-gradient(145deg, #fffafd, #faf9ff 55%, #fffaf5);
+    border-radius: 20px;
+    isolation: isolate;
+    padding: 8px;
+    position: relative;
+}
+
+#todos::before {
+    color: #d98eae;
+    content: "♡   ♥   ♡";
+    font-size: 2rem;
+    letter-spacing: 0.5rem;
+    opacity: 0.2;
+    pointer-events: none;
+    position: absolute;
+    right: 24px;
+    top: 76px;
+    z-index: 0;
+}
+
+#todos > * {
+    position: relative;
+    z-index: 1;
+}
+
+.todo-reward-card,
+.todo-day-panel,
+.todo-calendar-section {
+    background: #fff;
+    border-radius: 18px;
+    box-shadow: 0 8px 26px rgba(49, 46, 129, 0.08);
+    margin-bottom: 18px;
+    padding: 22px;
+}
+
+.todo-reward-card {
+    align-items: center;
+    background: linear-gradient(110deg, #fff1f6, #fff 48%, #f5f0ff);
+    border: 1px solid #f3deeb;
+    display: flex;
+    gap: 12px;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    padding: 9px 14px;
+}
+
+.todo-reward-card h2 {
+    color: #70506d;
+    flex: 0 0 auto;
+    font-size: 0.82rem;
+    margin: 0;
+}
+
+.todo-calendar-heading h2 {
+    color: #30304a;
+    font-size: 1.15rem;
+}
+
+.todo-muted {
+    color: #76768a;
+    font-size: 0.88rem;
+}
+
+.todo-reward-breakdown {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.todo-reward-person {
+    align-items: center;
+    background: rgba(255, 255, 255, 0.8);
+    border: 1px solid #f0e5ef;
+    border-radius: 999px;
+    color: #62526a;
+    display: inline-flex;
+    font-size: 0.78rem;
+    gap: 7px;
+    padding: 4px 10px;
+}
+
+.todo-reward-person strong {
+    color: #433448;
+    font-size: 0.84rem;
+}
+
+.todo-day-heading,
+.todo-calendar-heading,
+.todo-owner-heading {
+    align-items: center;
+    display: flex;
+    gap: 14px;
+    justify-content: space-between;
+}
+
+.todo-day-heading h2 {
+    color: #57475d;
+    font-size: 1.15rem;
+}
+
+.todo-date-picker,
+.todo-add-fields label {
+    color: #55556b;
+    display: grid;
+    font-size: 0.82rem;
+    font-weight: 700;
+    gap: 5px;
+}
+
+.todo-date-picker input,
+.todo-add-fields input,
+.todo-add-fields select,
+.todo-subtask-form input {
+    background: #fff;
+    border: 1px solid #dddde8;
+    border-radius: 10px;
+    color: #30304a;
+    font: inherit;
+    min-height: 42px;
+    padding: 9px 11px;
+}
+
+.todo-add-form {
+    background: linear-gradient(115deg, #fff6f9, #f8f6ff);
+    border: 1px solid #eee3f1;
+    border-radius: 14px;
+    margin-bottom: 20px;
+    padding: 16px;
+}
+
+.todo-add-title {
+    color: #57475d;
+    font-size: 1rem;
+    margin-bottom: 10px;
+}
+
+.todo-add-fields {
+    align-items: end;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) minmax(150px, 0.45fr) auto;
+}
+
+.todo-add-button {
+    min-height: 42px;
+}
+
+.todo-add-form > .todo-muted {
+    margin-top: 8px;
+}
+
+.todo-message {
+    color: #26734d;
+    font-size: 0.9rem;
+    font-weight: 700;
+    margin-top: 8px;
+}
+
+.todo-task-groups {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: minmax(0, 1fr);
+}
+
+.todo-owner-group {
+    background: rgba(255, 255, 255, 0.82);
+    border: 1px solid #f1e7ef;
+    border-radius: 14px;
+    min-width: 0;
+    padding: 14px;
+    position: relative;
+}
+
+.todo-owner-heading {
+    border-bottom: 1px solid #f0e8ef;
+    margin-bottom: 10px;
+    padding-bottom: 10px;
+}
+
+.todo-owner-heading h3 {
+    color: #514257;
+    font-size: 1rem;
+}
+
+.todo-owner-wifey .todo-owner-heading h3 span {
+    color: #d47d9e;
+}
+
+.todo-owner-heading span {
+    color: #77768a;
+    font-size: 0.78rem;
+    text-align: right;
+}
+
+.todo-owner-wifey {
+    background: linear-gradient(115deg, rgba(255, 244, 249, 0.96), rgba(255, 255, 255, 0.92));
+    border-color: #f4dce8;
+}
+
+.todo-owner-hubby {
+    background: linear-gradient(115deg, rgba(245, 246, 255, 0.96), rgba(255, 255, 255, 0.92));
+    border-color: #e5e2f5;
+}
+
+.todo-owner-hubby .todo-owner-heading h3 span {
+    color: #8d83c6;
+}
+
+.todo-empty {
+    color: #89889a;
+    font-size: 0.88rem;
+    padding: 12px 4px;
+}
+
+.todo-card {
+    background: #fff;
+    border: 1px solid #ececf2;
+    border-left: 5px solid #dc7777;
+    border-radius: 12px;
+    margin: 9px 0;
+    padding: 12px;
+    transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.todo-card:hover {
+    box-shadow: 0 4px 14px rgba(45, 43, 79, 0.08);
+    transform: translateY(-1px);
+}
+
+.todo-status-half_done {
+    border-left-color: #e9aa45;
+}
+
+.todo-status-completed {
+    background: #f1fbf5;
+    border-color: #d3efde;
+    border-left-color: #48a873;
+}
+
+.todo-task-summary {
+    align-items: flex-start;
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    cursor: pointer;
+    display: flex;
+    gap: 8px;
+    min-width: 0;
+    padding: 2px 0;
+    text-align: left;
+    width: 100%;
+}
+
+.todo-task-title {
+    color: #38374d;
+    flex: 1;
+    font-size: 0.97rem;
+    font-weight: 700;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.todo-card-expanded .todo-task-title {
+    overflow: visible;
+    overflow-wrap: anywhere;
+    white-space: normal;
+}
+
+.todo-status-completed .todo-task-title {
+    color: #26734d;
+}
+
+.todo-status-dot {
+    background: #d96969;
+    border-radius: 50%;
+    flex: 0 0 10px;
+    height: 10px;
+    margin-top: 6px;
+}
+
+.todo-status-half_done .todo-status-dot {
+    background: #e0a02e;
+}
+
+.todo-status-completed .todo-status-dot {
+    background: #48a873;
+}
+
+.todo-status-label {
+    background: #fff0f0;
+    border-radius: 999px;
+    color: #a74d4d;
+    flex: 0 0 auto;
+    font-size: 0.68rem;
+    font-weight: 800;
+    padding: 3px 8px;
+}
+
+.todo-status-half_done .todo-status-label {
+    background: #fff4df;
+    color: #95600a;
+}
+
+.todo-status-completed .todo-status-label {
+    background: #dcf4e5;
+    color: #28714b;
+}
+
+.todo-card-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin: 10px 0 6px;
+}
+
+.todo-action-button,
+.todo-subtask-remove {
+    background: #fff;
+    border: 1px solid #e3e2ec;
+    border-radius: 8px;
+    color: #5e5c70;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.76rem;
+    font-weight: 700;
+    min-height: 32px;
+    padding: 5px 9px;
+}
+
+.todo-done-button {
+    background: #e5f7eb;
+    border-color: #c8ecd5;
+    color: #237247;
+}
+
+.todo-half-button {
+    background: #fff5e3;
+    border-color: #f2dfb6;
+    color: #8d5d0d;
+}
+
+.todo-delete-button {
+    margin-left: auto;
+}
+
+.todo-checkpoint-heading {
+    border-top: 1px solid #efeff5;
+    color: #514257;
+    font-size: 0.82rem;
+    font-weight: 700;
+    margin-top: 8px;
+    padding-top: 8px;
+}
+
+.todo-checkpoint-heading span {
+    color: #817fa0;
+    font-weight: 600;
+}
+
+.todo-details {
+    border-top: 1px solid #efeff5;
+    margin-top: 10px;
+    padding-top: 10px;
+}
+
+.todo-subtask-list {
+    list-style: none;
+}
+
+.todo-subtask-list li {
+    align-items: center;
+    display: flex;
+    gap: 5px;
+    justify-content: space-between;
+    padding: 4px 0;
+}
+
+.todo-subtask-list li > button:first-child {
+    align-items: center;
+    background: transparent;
+    border: 0;
+    color: #4c4a60;
+    cursor: pointer;
+    display: flex;
+    flex: 1;
+    font: inherit;
+    gap: 8px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+    padding: 4px 0;
+    text-align: left;
+}
+
+.todo-subtask-list .subtask-completed > button:first-child span:last-child {
+    color: #828195;
+    text-decoration: line-through;
+}
+
+.todo-checkmark {
+    align-items: center;
+    border: 1px solid #c9c8d6;
+    border-radius: 5px;
+    color: #27814f;
+    display: inline-flex;
+    flex: 0 0 20px;
+    height: 20px;
+    justify-content: center;
+}
+
+.subtask-completed .todo-checkmark {
+    background: #e1f5e8;
+    border-color: #abdcbc;
+}
+
+.todo-subtask-remove {
+    border: 0;
+    color: #a65c5c;
+    font-size: 1.1rem;
+    min-height: 28px;
+    padding: 1px 8px;
+}
+
+.todo-subtask-form {
+    display: flex;
+    gap: 7px;
+    margin-top: 10px;
+}
+
+.todo-subtask-form input {
+    flex: 1;
+    min-width: 0;
+}
+
+.todo-calendar-section {
+    padding-bottom: 18px;
+}
+
+.todo-calendar-heading {
+    margin-bottom: 14px;
+}
+
+.todo-calendar {
+    display: grid;
+    gap: 6px;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    margin-top: 6px;
+}
+
+.todo-calendar-day {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #ededf3;
+    border-radius: 10px;
+    color: #47465b;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    font: inherit;
+    justify-content: center;
+    min-height: 64px;
+    padding: 5px 2px;
+}
+
+.todo-calendar-day small {
+    color: #77768a;
+    font-size: 0.68rem;
+    margin-top: 2px;
+}
+
+.todo-calendar-day.has-open-tasks {
+    background: #fff5f3;
+    border-color: #f2d8d2;
+}
+
+.todo-calendar-day.all-done {
+    background: #ecf8f0;
+    border-color: #cae9d4;
+    color: #26734d;
+}
+
+.todo-calendar-day.selected {
+    border: 2px solid #7064bd;
+    box-shadow: 0 0 0 2px rgba(112, 100, 189, 0.12);
+    font-weight: 800;
+}
+
+.todo-calendar-day.todo-calendar-empty {
+    background: transparent;
+    border-color: transparent;
+    cursor: default;
+}
+
+.sr-only {
+    clip: rect(0, 0, 0, 0);
+    clip-path: inset(50%);
+    height: 1px;
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+    width: 1px;
+}
+
+@media (max-width: 768px) {
+    .todo-shortcut {
+        font-size: 0.8rem;
+        padding: 6px 10px;
+    }
+
+    .todo-reward-card,
+    .todo-day-panel,
+    .todo-calendar-section {
+        border-radius: 14px;
+        margin-bottom: 12px;
+        padding: 15px 12px;
+    }
+
+    .todo-reward-card {
+        gap: 6px;
+        padding: 8px;
+    }
+
+    .todo-reward-card h2 {
+        font-size: 0.72rem;
+    }
+
+    .todo-reward-breakdown {
+        gap: 4px;
+    }
+
+    .todo-reward-person {
+        font-size: 0.68rem;
+        gap: 4px;
+        padding: 4px 7px;
+    }
+
+    .todo-reward-person strong {
+        font-size: 0.73rem;
+    }
+
+    .todo-calendar-heading h2 {
+        font-size: 1rem;
+    }
+
+    .todo-reward-card h2 {
+        font-size: 0.72rem;
+    }
+
+    .todo-day-heading,
+    .todo-calendar-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .todo-date-picker {
+        width: 100%;
+    }
+
+    .todo-date-picker input {
+        width: 100%;
+    }
+
+    .todo-add-fields {
+        grid-template-columns: 1fr;
+    }
+
+    .todo-add-button {
+        width: 100%;
+    }
+
+    .todo-owner-heading {
+        align-items: flex-start;
+    }
+
+    .todo-calendar-section .calendar-month-controls {
+        width: 100%;
+    }
+
+    .todo-calendar {
+        gap: 3px;
+    }
+
+    .todo-calendar-day {
+        border-radius: 7px;
+        min-height: 50px;
+    }
 }

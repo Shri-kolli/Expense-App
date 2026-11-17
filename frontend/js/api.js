@@ -71,6 +71,31 @@ async function deleteTransaction(transactionId) {
     return await apiRequest(API_CONFIG.endpoints.transactions, 'DELETE', { transactionId });
 }
 
+// Household todos API
+async function getTodosForMonth(month) {
+    return await apiRequest(`/api/todos?month=${encodeURIComponent(month)}`);
+}
+
+async function getTodoReward(month) {
+    return await apiRequest(`/api/todos/reward?month=${encodeURIComponent(month)}`);
+}
+
+async function addTodo(todoData) {
+    return await apiRequest('/api/todos', 'POST', todoData);
+}
+
+async function updateTodo(todoData) {
+    return await apiRequest('/api/todos', 'PUT', todoData);
+}
+
+async function deleteTodo(todoData) {
+    return await apiRequest('/api/todos', 'DELETE', todoData);
+}
+
+async function markTodoHalfDone(todoData) {
+    return await apiRequest('/api/todos/half-done', 'POST', todoData);
+}
+
 // Summary API
 async function getMonthlySummary(month = null) {
     let endpoint = API_CONFIG.endpoints.summary;

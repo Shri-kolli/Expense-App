@@ -4,12 +4,21 @@ import boto3
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from boto3.dynamodb.conditions import Key
+from boto3.dynamodb.types import TypeSerializer
+from botocore.exceptions import ClientError
 import uuid
 
 # Initialize DynamoDB
 dynamodb = boto3.resource('dynamodb')
 table = dynamodb.Table(os.environ['TABLE_NAME'])
 USER_ID = os.environ.get('USER_ID', 'user001')
+TODO_OWNERS = {'hubby', 'wifey'}
+TODO_DAILY_LIMIT = 6
+TODO_REWARD_PER_DAY = Decimal('100')
+serializer = TypeSerializer()
+
+class TodoConflictError(Exception):
+    """A task changed concurrently or its daily limit has been reached."""
 
 # Helper function to convert Decimal to float for JSON serialization
 def decimal_default(obj):
@@ -78,6 +87,22 @@ def lambda_handler(event, context):
                 transaction_id = body.get('transactionId')
                 return delete_transaction(transaction_id)
 
+        # Household todos
+        elif '/todos' in raw_path:
+            query = event.get('queryStringParameters') or {}
+            if raw_path.endswith('/todos/reward') and method == 'GET':
+                return get_todo_reward(query.get('month'))
+            if raw_path.endswith('/todos/half-done') and method == 'POST':
+                return mark_todo_half_done(body)
+            if method == 'GET':
+                return get_todos(query.get('date'), query.get('month'))
+            if method == 'POST':
+                return add_todo(body)
+            if method == 'PUT':
+                return update_todo(body)
+            if method == 'DELETE':
+                return delete_todo(body)
+
         # Monthly Summary
         elif '/summary' in raw_path:
             month = event.get('queryStringParameters', {}).get('month') if event.get('queryStringParameters') else None
@@ -94,9 +119,319 @@ def lambda_handler(event, context):
 
     except ValueError as e:
         return cors_response(400, {'error': str(e)})
+    except TodoConflictError as e:
+        return cors_response(409, {'error': str(e)})
     except Exception as e:
         print(f"Error: {str(e)}")
         return cors_response(500, {'error': str(e)})
+
+# ============= TODO FUNCTIONS =============
+
+def validate_todo_date(value):
+    """Validate a calendar date and return it in YYYY-MM-DD format."""
+    try:
+        parsed = datetime.strptime(value, '%Y-%m-%d')
+    except (TypeError, ValueError):
+        raise ValueError('Todo date must be a valid YYYY-MM-DD date')
+    if parsed.strftime('%Y-%m-%d') != value:
+        raise ValueError('Todo date must be a valid YYYY-MM-DD date')
+    return value
+
+def validate_todo_month(value):
+    """Validate a calendar month and return it in YYYY-MM format."""
+    try:
+        parsed = datetime.strptime(value, '%Y-%m')
+    except (TypeError, ValueError):
+        raise ValueError('Todo month must be a valid YYYY-MM month')
+    if parsed.strftime('%Y-%m') != value:
+        raise ValueError('Todo month must be a valid YYYY-MM month')
+    return value
+
+def validate_todo_id(value):
+    if not isinstance(value, str):
+        raise ValueError('Todo ID is required')
+    try:
+        return str(uuid.UUID(value))
+    except (ValueError, AttributeError):
+        raise ValueError('Todo ID is invalid')
+
+def validate_todo_title(value, label='Todo title'):
+    if not isinstance(value, str):
+        raise ValueError(f'{label} must be text')
+    title = value.strip()
+    if not title or len(title) > 160:
+        raise ValueError(f'{label} must be between 1 and 160 characters')
+    return title
+
+def todo_key(todo_date, todo_id):
+    return {'PK': f'USER#{USER_ID}', 'SK': f'TODO#{todo_date}#{todo_id}'}
+
+def serialize_item(item):
+    return {name: serializer.serialize(value) for name, value in item.items()}
+
+def todo_counter_key(todo_date, owner):
+    return {
+        'PK': serializer.serialize(f'USER#{USER_ID}'),
+        'SK': serializer.serialize(f'TODOCOUNT#{todo_date}#{owner}')
+    }
+
+def reserve_todo_slot(todo_date, owner):
+    return {
+        'Update': {
+            'TableName': table.name,
+            'Key': todo_counter_key(todo_date, owner),
+            'UpdateExpression': 'SET taskCount = if_not_exists(taskCount, :zero) + :one',
+            'ConditionExpression': 'attribute_not_exists(taskCount) OR taskCount < :limit',
+            'ExpressionAttributeValues': {
+                ':zero': {'N': '0'},
+                ':one': {'N': '1'},
+                ':limit': {'N': str(TODO_DAILY_LIMIT)}
+            }
+        }
+    }
+
+def transact_todo_write(operations, conflict_message):
+    try:
+        table.meta.client.transact_write_items(TransactItems=operations)
+    except ClientError as error:
+        if error.response.get('Error', {}).get('Code') == 'TransactionCanceledException':
+            raise TodoConflictError(conflict_message) from error
+        raise
+
+def query_todos(prefix):
+    items = []
+    query_args = {
+        'KeyConditionExpression': Key('PK').eq(f'USER#{USER_ID}') & Key('SK').begins_with(prefix)
+    }
+    while True:
+        response = table.query(**query_args)
+        items.extend(response.get('Items', []))
+        last_key = response.get('LastEvaluatedKey')
+        if not last_key:
+            break
+        query_args['ExclusiveStartKey'] = last_key
+    return items
+
+def get_todos(todo_date=None, month=None):
+    if todo_date:
+        prefix = f'TODO#{validate_todo_date(todo_date)}#'
+    elif month:
+        prefix = f'TODO#{validate_todo_month(month)}-'
+    else:
+        raise ValueError('Provide a date or month to load todos')
+
+    items = query_todos(prefix)
+    items.sort(key=lambda item: (item.get('owner', ''), item.get('createdAt', '')))
+    return cors_response(200, {'todos': items})
+
+def get_todo_reward(month):
+    month = validate_todo_month(month)
+    items = query_todos(f'TODO#{month}-')
+    daily_owner_counts = {}
+    for item in items:
+        key = (item['date'], item['owner'])
+        counts = daily_owner_counts.setdefault(key, {'total': 0, 'completed': 0})
+        counts['total'] += 1
+        if item.get('status') == 'completed':
+            counts['completed'] += 1
+
+    owner_rewards = {'hubby': Decimal('0'), 'wifey': Decimal('0')}
+    qualifying_days = {'hubby': 0, 'wifey': 0}
+    for (_, owner), counts in daily_owner_counts.items():
+        if counts['total'] >= 4:
+            qualifying_days[owner] += 1
+            owner_rewards[owner] += (
+                TODO_REWARD_PER_DAY * counts['completed'] / counts['total']
+            )
+
+    return cors_response(200, {
+        'month': month,
+        'rewardPerDay': TODO_REWARD_PER_DAY,
+        'minimumTasksPerPersonPerDay': 4,
+        'rewards': owner_rewards,
+        'qualifyingDays': qualifying_days,
+        'totalReward': owner_rewards['hubby'] + owner_rewards['wifey']
+    })
+
+def add_todo(body):
+    title = validate_todo_title(body.get('title'))
+    todo_date = validate_todo_date(body.get('date'))
+    owner = body.get('owner')
+    if owner not in TODO_OWNERS:
+        raise ValueError('Todo owner must be hubby or wifey')
+
+    now = datetime.now().isoformat()
+    todo_id = str(uuid.uuid4())
+    item = {
+        **todo_key(todo_date, todo_id),
+        'todoId': todo_id,
+        'title': title,
+        'owner': owner,
+        'date': todo_date,
+        'status': 'open',
+        'subtasks': [],
+        'createdAt': now,
+        'updatedAt': now
+    }
+    transact_todo_write([
+        reserve_todo_slot(todo_date, owner),
+        {
+            'Put': {
+                'TableName': table.name,
+                'Item': serialize_item(item),
+                'ConditionExpression': 'attribute_not_exists(PK) AND attribute_not_exists(SK)'
+            }
+        }
+    ], f'{owner.title()} already has {TODO_DAILY_LIMIT} tasks for this day')
+    return cors_response(201, {'todo': item})
+
+def update_todo(body):
+    todo_date = validate_todo_date(body.get('date'))
+    todo_id = validate_todo_id(body.get('todoId'))
+
+    updates = []
+    names = {}
+    values = {}
+    if 'status' in body:
+        status = body['status']
+        if status not in ('open', 'completed'):
+            raise ValueError('Todo status must be open or completed')
+        names['#status'] = 'status'
+        values[':status'] = status
+        updates.append('#status = :status')
+    if 'subtasks' in body:
+        subtasks = body['subtasks']
+        if not isinstance(subtasks, list) or len(subtasks) > 5:
+            raise ValueError('A todo can have up to 5 subtasks')
+        validated_subtasks = []
+        for subtask in subtasks:
+            if not isinstance(subtask, dict):
+                raise ValueError('Each subtask must be an object')
+            text = validate_todo_title(subtask.get('text'), 'Subtask title')
+            subtask_id = subtask.get('id')
+            completed = subtask.get('completed')
+            if not isinstance(subtask_id, str) or not subtask_id or len(subtask_id) > 64 or not isinstance(completed, bool):
+                raise ValueError('Each subtask needs an ID, a title, and a completion state')
+            validated_subtasks.append({
+                'id': subtask_id,
+                'text': text,
+                'completed': completed
+            })
+        names['#subtasks'] = 'subtasks'
+        values[':subtasks'] = validated_subtasks
+        updates.append('#subtasks = :subtasks')
+    if not updates:
+        raise ValueError('Provide a todo status or subtasks to update')
+
+    values[':updated'] = datetime.now().isoformat()
+    updates.append('updatedAt = :updated')
+    try:
+        response = table.update_item(
+            Key=todo_key(todo_date, todo_id),
+            UpdateExpression='SET ' + ', '.join(updates),
+            ConditionExpression='attribute_exists(PK)',
+            ExpressionAttributeNames=names,
+            ExpressionAttributeValues=values,
+            ReturnValues='ALL_NEW'
+        )
+    except ClientError as error:
+        if error.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
+            return cors_response(404, {'error': 'Todo not found'})
+        raise
+    return cors_response(200, {'todo': response['Attributes']})
+
+def delete_todo(body):
+    todo_date = validate_todo_date(body.get('date'))
+    todo_id = validate_todo_id(body.get('todoId'))
+    owner = body.get('owner')
+    if owner not in TODO_OWNERS:
+        raise ValueError('A valid todo owner is required')
+
+    key = todo_key(todo_date, todo_id)
+    existing = table.get_item(Key=key).get('Item')
+    if not existing:
+        return cors_response(404, {'error': 'Todo not found'})
+    if existing.get('owner') != owner:
+        raise ValueError('Todo owner does not match')
+
+    transact_todo_write([
+        {
+            'Update': {
+                'TableName': table.name,
+                'Key': todo_counter_key(todo_date, owner),
+                'UpdateExpression': 'SET taskCount = taskCount - :one',
+                'ConditionExpression': 'taskCount >= :one',
+                'ExpressionAttributeValues': {':one': {'N': '1'}}
+            }
+        },
+        {
+            'Delete': {
+                'TableName': table.name,
+                'Key': {name: serializer.serialize(value) for name, value in key.items()},
+                'ConditionExpression': 'attribute_exists(PK)'
+            }
+        }
+    ], 'This todo changed while it was being deleted. Refresh and try again')
+    return cors_response(200, {'message': 'Todo deleted'})
+
+def mark_todo_half_done(body):
+    todo_date = validate_todo_date(body.get('date'))
+    continuation_date = validate_todo_date(body.get('continuationDate'))
+    todo_id = validate_todo_id(body.get('todoId'))
+
+    key = todo_key(todo_date, todo_id)
+    original = table.get_item(Key=key).get('Item')
+    if not original:
+        return cors_response(404, {'error': 'Todo not found'})
+    if original.get('status') != 'open':
+        raise TodoConflictError('Only an open todo can be marked half done')
+
+    continuation_title = validate_todo_title(body.get('continuationTitle'), 'Continuation title')
+
+    now = datetime.now().isoformat()
+    continuation_id = str(uuid.uuid4())
+    continuation = {
+        **todo_key(continuation_date, continuation_id),
+        'todoId': continuation_id,
+        'title': continuation_title,
+        'owner': original['owner'],
+        'date': continuation_date,
+        'status': 'open',
+        'subtasks': [],
+        'continuationOf': todo_id,
+        'createdAt': now,
+        'updatedAt': now
+    }
+    operations = [
+        {
+            'Update': {
+                'TableName': table.name,
+                'Key': {name: serializer.serialize(value) for name, value in key.items()},
+                'UpdateExpression': 'SET #status = :half, updatedAt = :updated, continuationTaskId = :continuation',
+                'ConditionExpression': 'attribute_exists(PK) AND #status = :open',
+                'ExpressionAttributeNames': {'#status': 'status'},
+                'ExpressionAttributeValues': {
+                    ':half': {'S': 'half_done'},
+                    ':open': {'S': 'open'},
+                    ':updated': {'S': now},
+                    ':continuation': {'S': continuation_id}
+                }
+            }
+        },
+        reserve_todo_slot(continuation_date, original['owner']),
+        {
+            'Put': {
+                'TableName': table.name,
+                'Item': serialize_item(continuation),
+                'ConditionExpression': 'attribute_not_exists(PK) AND attribute_not_exists(SK)'
+            }
+        }
+    ]
+    transact_todo_write(
+        operations,
+        f'{original["owner"].title()} already has {TODO_DAILY_LIMIT} tasks on the continuation date, or the original task changed'
+    )
+    return cors_response(200, {'todo': continuation, 'originalStatus': 'half_done'})
 
 # ============= CATEGORY FUNCTIONS =============
 
