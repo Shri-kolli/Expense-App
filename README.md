@@ -1,8 +1,8 @@
-# 💰 Personal Expense Tracker
+# Personal Expense Tracker
 
-A **complete, production-ready** serverless expense tracking application built on AWS with **minimal cost** (~$0.50-$2/month).
+A private household expense tracker served over HTTPS. AWS charges vary with traffic and free-tier eligibility; they are not guaranteed to be zero.
 
-Built specifically for personal expense management with features matching your spreadsheet workflow, including income tracking, category limits, monthly carryover, and detailed transaction history.
+The deployed app is at [https://d2t510a2ojscqn.cloudfront.net/](https://d2t510a2ojscqn.cloudfront.net/). Sign in with an administrator-invited Cognito account.
 
 ## 🚀 Quick Start
 
@@ -16,11 +16,11 @@ aws configure
 # 3. Deploy everything
 ./scripts/deploy.sh
 
-# 4. Open your website and start tracking!
+# 4. Open the CloudFront URL printed by Terraform and sign in
 ```
 
 **Deployment time**: ~15 minutes  
-**Monthly cost**: ~$0.50-$2 (mostly free tier)
+**Security**: HTTPS through CloudFront, private S3 origin, invite-only Cognito sign-in, and JWT-protected API (MFA disabled)
 
 📖 **New to this project?** Start with [GET_STARTED.md](GET_STARTED.md)
 
@@ -58,7 +58,8 @@ aws configure
 ## 🏗️ Architecture
 
 ```
-User Browser → S3 (Frontend) → API Gateway → Lambda → DynamoDB
+Browser → CloudFront HTTPS → Private S3 (frontend)
+                         → API Gateway → Lambda → DynamoDB
 ```
 
 **Technology Stack**:
@@ -66,7 +67,8 @@ User Browser → S3 (Frontend) → API Gateway → Lambda → DynamoDB
 - **Backend**: Python 3.11 on AWS Lambda
 - **Database**: DynamoDB (NoSQL, single-table design)
 - **Infrastructure**: Terraform (Infrastructure as Code)
-- **Hosting**: S3 Static Website + API Gateway
+- **Hosting**: CloudFront with a private S3 origin
+- **Authentication**: Cognito sign-in and API JWT authorization (MFA disabled)
 
 **Why This Stack?**
 - ✅ Serverless = No servers to manage
@@ -100,36 +102,16 @@ See [PROJECT_STRUCTURE.txt](PROJECT_STRUCTURE.txt) for detailed breakdown.
 
 ## 💰 Cost Breakdown
 
-| Service | Monthly Cost | Details |
-|---------|-------------|---------|
-| S3 | ~$0.50 | Static website hosting |
-| API Gateway | $0.00 | Within 1M free requests |
-| Lambda | $0.00 | Within 1M free requests |
-| DynamoDB | $0.00 | Within 25GB free tier |
-| **Total** | **~$0.50-$2** | Cheaper than any subscription! |
-
-**Annual cost**: ~$6-24 (less than one month of most SaaS tools)
+AWS costs depend on usage, region, account age, and current free-tier eligibility.
+For a two-person household usage should be small, but CloudFront and other services
+are not guaranteed to be free. Check the AWS Billing console regularly.
 
 ## 🎯 Common Operations
 
-### Add a Transaction
-1. Open your website
-2. Click "Add Transaction" tab
-3. Select Expense/Income
-4. Choose category, enter amount & description
-5. Click "Add Transaction"
-
-### View Dashboard
-- See monthly income vs expenses
-- Category-wise spending with progress bars
-- Current balance and carryover
-- Recent transactions
-
-### Manage Categories
-1. Click "Categories" tab
-2. Add new category with custom icon/color/limit
-3. Edit existing categories
-4. Delete unused categories
+### Use the dashboard
+- Add an expense from a category or subcategory.
+- Review monthly totals, category budgets, daily spending, and transaction history.
+- Manage categories and budgets from the dashboard.
 
 ### Update After Code Changes
 ```bash
@@ -140,14 +122,12 @@ See [PROJECT_STRUCTURE.txt](PROJECT_STRUCTURE.txt) for detailed breakdown.
 ./scripts/update-lambda.sh
 ```
 
-## 🔐 Security Note
+## Security
 
-⚠️ **Current setup**: Minimal security, suitable for personal use only.
-- No authentication required
-- Anyone with the URL can access
-- Not recommended for sensitive financial data
-
-💡 To add authentication, see the security section in [DEPLOYMENT.md](DEPLOYMENT.md).
+The deployed app uses HTTPS through CloudFront, a private S3 origin, invite-only
+Cognito accounts, and JWT-protected API requests. MFA is disabled for easier household use.
+Never share your temporary password. AWS account administrators can still access
+the AWS resources and stored data.
 
 ## 🛠️ Customization
 
@@ -160,20 +140,15 @@ Everything is customizable:
 
 ## 📈 What's Next?
 
-After deployment:
-1. Initialize default categories
-2. Add your first transaction
-3. Check the dashboard
-4. Customize categories to your needs
-5. Start tracking daily!
+After signing in, initialize categories if prompted, then add transactions from the dashboard.
 
 ## 🐛 Troubleshooting
 
-**Can't access website?** Wait 2-3 minutes after deployment.
+**Can't access website?** Use the HTTPS CloudFront URL, not the S3 website endpoint.
 
-**"API not configured" error?** Check `frontend/js/config.js` has the correct API endpoint.
+**Can't sign in?** Check the invite email (including spam). On first sign-in, change the temporary password.
 
-**Data not loading?** Initialize default data by clicking "Yes" when prompted.
+**API requests return 401?** Sign in again; API requests require an active Cognito session.
 
 **More help?** See troubleshooting section in [DEPLOYMENT.md](DEPLOYMENT.md).
 

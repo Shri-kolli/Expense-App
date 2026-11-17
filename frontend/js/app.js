@@ -5,6 +5,8 @@ let summaryCarryover = {};
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
+    if (!await initializeAuthentication()) return;
+
     // Set current month display
     document.getElementById('currentMonth').textContent = formatMonthDisplay(currentMonth);
 

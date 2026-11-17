@@ -2,73 +2,18 @@
 
 ## Overview
 
-This is a **serverless, cost-optimized** personal expense tracking application built entirely on AWS services.
+This is a serverless personal expense tracking application built on AWS. Charges vary
+with usage and free-tier eligibility.
 
 ## Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                          USER                                │
-│                       (Web Browser)                          │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         │ HTTPS
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Amazon S3                                 │
-│              (Static Website Hosting)                        │
-│   ┌─────────────────────────────────────────────┐          │
-│   │  index.html │ style.css │ app.js │ config.js│          │
-│   └─────────────────────────────────────────────┘          │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         │ REST API Calls
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│              Amazon API Gateway (HTTP API)                   │
-│                    CORS Enabled                              │
-│                                                              │
-│  Routes:                                                     │
-│    GET/POST/PUT/DELETE  /categories                         │
-│    GET/POST/PUT/DELETE  /transactions                       │
-│    GET                  /summary                             │
-│    POST                 /initialize                          │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         │ Invoke
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    AWS Lambda                                │
-│              (Python 3.11 Runtime)                           │
-│                                                              │
-│  Function: expense_tracker_api                               │
-│  Handler: main.lambda_handler                                │
-│  Timeout: 30s                                                │
-│  Memory: 128MB                                               │
-│                                                              │
-│  Environment Variables:                                      │
-│    - TABLE_NAME                                              │
-│    - USER_ID                                                 │
-└────────────────────────┬────────────────────────────────────┘
-                         │
-                         │ Query/Put/Update/Delete
-                         ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   Amazon DynamoDB                            │
-│                (On-Demand Billing)                           │
-│                                                              │
-│  Table: ExpenseTrackerData                                   │
-│  Keys: PK (Hash), SK (Range)                                 │
-│                                                              │
-│  GSI: GSI1 (for month-based queries)                         │
-│  Keys: GSI1PK (Hash), GSI1SK (Range)                         │
-│                                                              │
-│  Item Types:                                                 │
-│    - USER#<id>#PROFILE                                       │
-│    - USER#<id>#CATEGORY#<catId>                             │
-│    - USER#<id>#TRANSACTION#<timestamp>#<txnId>              │
-│    - USER#<id>#SUMMARY#<month>                              │
-└─────────────────────────────────────────────────────────────┘
+Browser ── HTTPS ──> CloudFront
+                        ├── static files ──> Private S3 origin (OAC)
+                        └── /api/* ──> API Gateway (Cognito JWT) ──> Lambda ──> DynamoDB
+
+Browser ── Authorization Code + PKCE ──> Cognito Hosted UI
+                                          (admin-invited users; MFA disabled)
 ```
 
 ## Data Flow
@@ -232,55 +177,21 @@ get_item(
 
 ## Cost Breakdown
 
-### Monthly Costs (Personal Use)
+### Cost
 
-| Service | Usage | Cost |
-|---------|-------|------|
-| **S3** | 1GB storage, 10k requests | ~$0.50 |
-| **API Gateway** | HTTP API, <1M requests | FREE |
-| **Lambda** | <1M requests, <400k GB-sec | FREE |
-| **DynamoDB** | <25GB storage, minimal RCU/WCU | FREE |
-| **Data Transfer** | Minimal | ~$0.10 |
-| **TOTAL** | | **~$0.60-$2/month** |
-
-### Why So Cheap?
-
-1. **Serverless** - No idle servers running
-2. **On-Demand DynamoDB** - Pay per request (free tier covers personal use)
-3. **HTTP API** - Cheaper than REST API Gateway
-4. **Free Tier** - Lambda and API Gateway within free limits
-5. **Static Hosting** - S3 is cheapest for frontend
-
-### Cost Optimization Strategies
-
-✅ **Already Implemented:**
-- On-demand DynamoDB (vs provisioned)
-- HTTP API Gateway (vs REST API)
-- No CloudFront (uses direct S3)
-- ap-south-1 region
-- Minimal Lambda memory (128MB)
-
-❌ **Avoided (adds cost):**
-- CloudFront CDN (~$1/month minimum)
-- REST API Gateway (3x more expensive)
-- NAT Gateway ($30+/month)
-- Cognito User Pools (mostly free, but adds complexity)
+The deployment uses on-demand DynamoDB and serverless services. Actual charges vary
+with traffic, region, account age, free-tier eligibility, and current AWS pricing.
+CloudFront and Cognito are included; do not assume the deployment is free. Check AWS
+Billing regularly and configure a budget alert.
 
 ## Security
 
-### Current Setup (Minimal Security)
-- ✅ HTTPS via S3/API Gateway
-- ✅ IAM roles for Lambda
-- ✅ CORS configured
-- ❌ No authentication
-- ❌ Public website access
-
-### For Production Use (Not Implemented)
-- Add AWS Cognito for authentication
-- API Gateway API keys
-- CloudFront with custom domain
-- WAF for protection
-- Encryption at rest (DynamoDB)
+### Deployed Setup
+- HTTPS served by CloudFront with security response headers
+- S3 origin is private and accessible only through CloudFront
+- Cognito users are administrator-created; MFA is disabled for easier household use
+- API Gateway validates Cognito JWTs before forwarding requests to Lambda
+- The public CloudFront URL serves the login page; application data requires sign-in
 
 ## Scalability
 
@@ -381,8 +292,6 @@ get_item(
 ## Future Architecture Improvements
 
 ### Phase 2 (Optional)
-- Add CloudFront for custom domain
-- Implement Cognito authentication
 - Add data export/import
 - Scheduled Lambda for monthly reports
 

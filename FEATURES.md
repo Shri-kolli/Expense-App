@@ -165,7 +165,7 @@
 - ⏳ Import from CSV
 - ⏳ Charts and graphs (spending trends)
 - ⏳ Budget alerts (email/SMS when over limit)
-- ⏳ Multi-user support with authentication
+- ⏳ Multi-user data separation
 - ⏳ Recurring transactions
 - ⏳ Custom date range filtering
 - ⏳ Search functionality
@@ -179,16 +179,14 @@
 ## Limitations
 
 **Current Limitations**
-- Single user only (no authentication)
+- Expense data uses a shared household account; separate per-user data is not implemented
 - No data export yet
 - No advanced filtering
 - No recurring transactions
 - Basic reporting only
 
-**Security Limitations**
-- No authentication system
-- Public S3 website (anyone with URL can access)
-- Not suitable for sensitive data
+**Security**
+- The deployed site uses CloudFront HTTPS, private S3 access, Cognito sign-in, and a JWT-protected API. MFA is disabled for easier household use.
 
 ## Performance
 

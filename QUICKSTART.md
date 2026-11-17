@@ -90,19 +90,14 @@ Based on your spreadsheet data:
 
 ## Cost
 
-**~$0.50 - $2/month** (mostly free tier)
-
-- DynamoDB: Free (within 25GB)
-- Lambda: Free (within 1M requests)
-- API Gateway: Free (within 1M requests)
-- S3: ~$0.50/month (storage only)
+Costs vary with usage and AWS free-tier eligibility. CloudFront and other services are
+not guaranteed to be free. Check AWS Billing regularly.
 
 ## Troubleshooting
 
 ### Can't access website
-- Wait 2-3 minutes after deployment
-- Check S3 bucket is public
-- Verify website URL is correct
+- Open the HTTPS CloudFront URL, not the private S3 website endpoint.
+- If prompted, sign in with the Cognito user.
 
 ### "API not configured" error
 - The deployment script should auto-configure this

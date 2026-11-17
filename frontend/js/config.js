@@ -1,16 +1,16 @@
 // API Configuration
 const API_CONFIG = {
-    baseUrl: 'https://xi07bgreg7.execute-api.ap-south-1.amazonaws.com',
+    baseUrl: window.location.origin,
     endpoints: {
-        categories: '/categories',
-        transactions: '/transactions',
-        summary: '/summary',
-        initialize: '/initialize'
+        categories: '/api/categories',
+        transactions: '/api/transactions',
+        summary: '/api/summary',
+        initialize: '/api/initialize'
     }
 };
 
 function isApiConfigured() {
-    return API_CONFIG.baseUrl !== 'YOUR_API_GATEWAY_URL_HERE';
+    return Boolean(API_CONFIG.baseUrl);
 }
 
 function getApiUrl(endpoint) {

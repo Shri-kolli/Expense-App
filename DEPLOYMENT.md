@@ -11,198 +11,39 @@ This guide will help you deploy your Personal Expense Tracker to AWS.
 
 ## Cost Estimate
 
-- **Expected monthly cost**: $0.50 - $2.00
-- Most services stay within AWS Free Tier for personal use
+- **Expected monthly cost**: Depends on CloudFront traffic and AWS free-tier eligibility.
+- A two-person household should have low usage, but AWS charges are not guaranteed to be $0.
 
 ## Step-by-Step Deployment
 
-### Option 1: Using Terraform (Recommended)
+### Deploy or update
 
-#### Step 1: Install Prerequisites
+Use the maintained deployment script from the project root:
 
 ```bash
-# Install AWS CLI
-# macOS
-brew install awscli
-
-# Configure AWS CLI
 aws configure
-# Enter your AWS Access Key ID, Secret Access Key, and region (use ap-south-1)
-
-# Install Terraform
-brew install terraform
+bash scripts/deploy.sh
 ```
 
-#### Step 2: Customize Configuration
-
-Edit `infrastructure/terraform/variables.tf`:
-
-```hcl
-variable "bucket_name" {
-  default     = "your-unique-bucket-name-here"  # MUST BE GLOBALLY UNIQUE
-}
-
-variable "user_id" {
-  default     = "user001"  # Your personal user ID
-}
-```
-
-#### Step 3: Deploy Infrastructure
-
-```bash
-cd infrastructure/terraform
-
-# Initialize Terraform
-terraform init
-
-# Preview what will be created
-terraform plan
-
-# Deploy
-terraform apply
-# Type 'yes' when prompted
-
-# SAVE THE OUTPUTS - you'll need them!
-# - website_url: Your S3 website URL
-# - api_endpoint: Your API Gateway endpoint
-```
-
-#### Step 4: Update Frontend Configuration
-
-Copy the `api_endpoint` from Terraform output and update:
-
-```bash
-# Edit frontend/js/config.js
-# Replace 'YOUR_API_GATEWAY_URL_HERE' with your actual API endpoint
-```
-
-Example:
-```javascript
-const API_CONFIG = {
-    baseUrl: 'https://abc123xyz.execute-api.ap-south-1.amazonaws.com',
-    // ...
-};
-```
-
-#### Step 5: Deploy Frontend to S3
-
-```bash
-# From project root
-cd frontend
-
-# Upload to S3 (replace bucket name)
-aws s3 sync . s3://your-bucket-name --delete
-
-# Make files public
-aws s3 cp s3://your-bucket-name s3://your-bucket-name --recursive --acl public-read
-```
-
-#### Step 6: Initialize Default Data
-
-Open your website URL (from Terraform output) in a browser. When prompted, click "Yes" to initialize default categories.
-
-OR manually initialize via API:
-
-```bash
-curl -X POST https://your-api-endpoint.com/initialize
-```
-
-### Option 2: Using AWS Console (Manual)
-
-<details>
-<summary>Click to expand manual deployment steps</summary>
-
-#### Step 1: Create DynamoDB Table
-
-1. Go to AWS Console → DynamoDB
-2. Create table:
-   - Table name: `ExpenseTrackerData`
-   - Partition key: `PK` (String)
-   - Sort key: `SK` (String)
-   - Settings: On-demand (default)
-3. Add Global Secondary Index:
-   - Index name: `GSI1`
-   - Partition key: `GSI1PK` (String)
-   - Sort key: `GSI1SK` (String)
-   - Projection: All attributes
-
-#### Step 2: Create Lambda Function
-
-1. Go to AWS Console → Lambda
-2. Create function:
-   - Name: `expense_tracker_api`
-   - Runtime: Python 3.11
-   - Create new role with basic Lambda permissions
-3. Add permissions to role:
-   - Attach policy: `AmazonDynamoDBFullAccess`
-4. Upload code:
-   - Zip `backend/functions/main.py`
-   - Upload to Lambda
-5. Set environment variables:
-   - `TABLE_NAME`: `ExpenseTrackerData`
-   - `USER_ID`: `user001`
-6. Set timeout: 30 seconds
-
-#### Step 3: Create API Gateway
-
-1. Go to AWS Console → API Gateway
-2. Create HTTP API (not REST API)
-3. Add integration → Lambda
-4. Select your Lambda function
-5. Create route: `ANY /{proxy+}`
-6. Enable CORS
-7. Deploy API
-8. Copy the API endpoint URL
-
-#### Step 4: Create S3 Bucket
-
-1. Go to AWS Console → S3
-2. Create bucket (unique name)
-3. Enable static website hosting
-4. Set index document: `index.html`
-5. Make bucket public:
-   - Disable "Block all public access"
-   - Add bucket policy (see below)
-6. Upload frontend files
-
-**Bucket Policy:**
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Sid": "PublicReadGetObject",
-      "Effect": "Allow",
-      "Principal": "*",
-      "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::YOUR-BUCKET-NAME/*"
-    }
-  ]
-}
-```
-
-#### Step 5: Update Frontend Config and Upload
-
-1. Edit `frontend/js/config.js` with your API endpoint
-2. Upload all frontend files to S3
-
-</details>
+Use the same bucket name, user ID, and `ap-south-1` region as the existing deployment.
+Review the Terraform plan before approving changes. The script keeps the same-origin
+API and Cognito configuration in the frontend; do not replace them with a direct,
+unauthenticated API endpoint.
 
 ## Post-Deployment
 
 ### Access Your Application
 
-Visit your S3 website URL:
+Visit the HTTPS CloudFront URL printed by Terraform:
 ```
-http://your-bucket-name.s3-website.ap-south-1.amazonaws.com
+https://dxxxxxxxxxxxxx.cloudfront.net
 ```
+Sign in with an administrator-invited Cognito account. First sign-in requires changing the
+temporary password and enrolling an authenticator app.
 
 ### Initialize Default Data
 
-On first visit, accept the prompt to initialize default categories, or call:
-```bash
-curl -X POST https://your-api-endpoint/initialize
-```
+After signing in, initialize categories if prompted. The API rejects unauthenticated requests.
 
 ### Test the Application
 
@@ -214,36 +55,23 @@ curl -X POST https://your-api-endpoint/initialize
 
 ## Making Updates
 
-### Update Lambda Function
-
-```bash
-cd backend/functions
-zip -r function.zip .
-aws lambda update-function-code \
-  --function-name expense_tracker_api \
-  --zip-file fileb://function.zip
-```
-
-### Update Frontend
-
-```bash
-cd frontend
-aws s3 sync . s3://your-bucket-name --delete
-```
+For code updates, use the same deployment script or carefully upload only the changed
+files to the private bucket. Never disable S3 public-access blocking or grant public
+read access. CloudFront serves the private origin.
 
 ## Troubleshooting
 
-### "API not configured" error
-- Make sure you updated `frontend/js/config.js` with your actual API endpoint
-- Re-upload frontend files to S3
+### Sign-in or API errors
+- Confirm that you are using the CloudFront HTTPS URL.
+- Sign in again if the session has expired.
+- Check that the frontend Cognito configuration matches the deployed user pool and client.
 
-### CORS errors
-- Check API Gateway CORS configuration
-- Ensure all methods (GET, POST, PUT, DELETE) are allowed
+### 401 Unauthorized
+- The API requires a valid Cognito session. Sign in again.
 
-### 403 Forbidden on S3
-- Check bucket policy allows public access
-- Verify "Block Public Access" is disabled
+### 403 Forbidden on the S3 website endpoint
+- This is expected: the S3 bucket is private and its website endpoint is disabled.
+- Open the CloudFront HTTPS URL instead.
 
 ### Lambda timeout
 - Increase timeout in Lambda configuration (current: 30s)
@@ -262,30 +90,21 @@ aws s3 sync . s3://your-bucket-name --delete
 - ✅ S3: Minimal storage costs
 
 ### Additional Savings
-- Use CloudFront only if you need a custom domain (adds cost)
+- CloudFront charges depend on requests, data transfer, and free-tier eligibility.
 - Keep Lambda memory at default 128MB
 - Use `ap-south-1` region
 
 ## Security Notes
 
-⚠️ **Important**: This is a personal expense tracker with minimal security:
-- No authentication/login system
-- Anyone with the URL can access
-- Do NOT use for sensitive financial data
+The deployed app uses HTTPS CloudFront, a private S3 origin, invite-only Cognito accounts,
+and API Gateway JWT authorization. MFA is disabled for easier household use. Keep the
+temporary password private and change it during first sign-in. AWS account administrators
+can still access resources and data.
 
-### To Add Basic Security (Optional)
-
-1. **API Key Protection**:
-   - Add API key to API Gateway
-   - Update frontend to include API key in requests
-
-2. **AWS Cognito** (adds ~$0/month for first 50k users):
-   - Add user authentication
-   - More complex setup
-
-3. **VPC Configuration**:
-   - Put Lambda in VPC
-   - More expensive (NAT Gateway costs)
+The default `cloudfront.net` hostname uses CloudFront's default certificate, which does
+not let this configuration set a custom minimum TLS version. Enforcing a chosen TLS
+minimum requires an alternate domain and ACM certificate; the current setup does not
+include those additional domain requirements.
 
 ## Cleanup / Destroy
 

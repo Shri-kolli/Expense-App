@@ -85,40 +85,26 @@ echo "🏗️  Creating infrastructure..."
 "$TERRAFORM" apply -auto-approve
 
 # Capture outputs
-API_ENDPOINT=$("$TERRAFORM" output -raw api_endpoint)
+USER_POOL_ID=$("$TERRAFORM" output -raw cognito_user_pool_id)
+CLIENT_ID=$("$TERRAFORM" output -raw cognito_client_id)
+LOGIN_DOMAIN=$("$TERRAFORM" output -raw cognito_login_domain)
 WEBSITE_URL=$("$TERRAFORM" output -raw website_url)
 
 echo ""
 echo "✅ Infrastructure created successfully!"
 echo ""
-echo "API Endpoint: $API_ENDPOINT"
 echo "Website URL: $WEBSITE_URL"
 echo ""
 
-# Update frontend config
+# Keep the frontend's public Cognito settings aligned with this deployment.
 cd ../../frontend/js
-
-echo "📝 Updating frontend configuration..."
-
-cat > config.js <<EOF
-// API Configuration
-const API_CONFIG = {
-    baseUrl: '$API_ENDPOINT',
-    endpoints: {
-        categories: '/categories',
-        transactions: '/transactions',
-        summary: '/summary',
-        initialize: '/initialize'
-    }
+cat > auth-config.js <<EOF
+const AUTH_CONFIG = {
+    region: '$AWS_REGION',
+    userPoolId: '$USER_POOL_ID',
+    clientId: '$CLIENT_ID',
+    hostedUiDomain: '$LOGIN_DOMAIN'
 };
-
-function isApiConfigured() {
-    return API_CONFIG.baseUrl !== 'YOUR_API_GATEWAY_URL_HERE';
-}
-
-function getApiUrl(endpoint) {
-    return API_CONFIG.baseUrl + endpoint;
-}
 EOF
 
 # Deploy frontend to S3
@@ -135,14 +121,11 @@ echo "================================================"
 echo "Your Expense Tracker is ready!"
 echo ""
 echo "Website URL: $WEBSITE_URL"
-echo "API Endpoint: $API_ENDPOINT"
 echo ""
 echo "Next Steps:"
-echo "1. Open the website URL in your browser"
-echo "2. Click 'Yes' when prompted to initialize default categories"
-echo "3. Start tracking your expenses!"
-echo ""
-echo "To initialize via API:"
-echo "  curl -X POST $API_ENDPOINT/initialize"
+echo "1. Open the HTTPS website URL"
+echo "2. Sign in with an administrator-created Cognito account"
+echo "3. On first sign-in, change the temporary password and enroll authenticator-app MFA"
+echo "4. Initialize categories if prompted"
 echo ""
 echo "================================================"

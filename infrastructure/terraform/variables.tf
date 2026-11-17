@@ -15,3 +15,9 @@ variable "user_id" {
   type        = string
   default     = "user001" # Your personal user ID
 }
+
+variable "cognito_domain_prefix" {
+  description = "Globally unique Cognito hosted login domain prefix"
+  type        = string
+  default     = "shri-expense-tracker-841611145026"
+}

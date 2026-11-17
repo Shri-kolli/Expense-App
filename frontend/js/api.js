@@ -10,7 +10,8 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
     const options = {
         method,
         headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${await getAuthorizationToken()}`
         }
     };
 

@@ -41,13 +41,18 @@ Open the website URL shown at the end.
 │ YOUR AWS ACCOUNT                        │
 │                                         │
 │  ┌──────────────────┐                  │
-│  │   S3 BUCKET      │ NEW! ✅          │
-│  │  (Your Website)  │                  │
+│  │  DynamoDB Table  │ NEW! ✅          │
+│  │  (Your Data)     │                  │
 │  └──────────────────┘                  │
 │                                         │
 │  ┌──────────────────┐                  │
-│  │  DynamoDB Table  │ NEW! ✅          │
-│  │  (Your Data)     │                  │
+│  │ Private S3 + CDN │ HTTPS ✅         │
+│  │ (Website only)   │                  │
+│  └──────────────────┘                  │
+│                                         │
+│  ┌──────────────────┐                  │
+│  │ Cognito Login    │ MFA off          │
+│  │ (Invite only)    │                  │
 │  └──────────────────┘                  │
 │                                         │
 │  ┌──────────────────┐                  │
@@ -62,15 +67,16 @@ Open the website URL shown at the end.
 │                                         │
 └─────────────────────────────────────────┘
 
-Total Cost: ~$0.50-$2/month
+Cost depends on traffic and AWS free-tier eligibility. For two users, usage should be small,
+but CloudFront and other services are not guaranteed to be free. Check AWS billing.
 ```
 
 ---
 
 ## ❓ FAQs
 
-**Q: Does it create a new S3 bucket?**  
-A: YES! You choose a unique name, it creates it for you.
+**Q: Is the S3 website public?**  
+A: No. S3 access is private; the site is served through HTTPS CloudFront.
 
 **Q: Do I need an existing bucket?**  
 A: NO! Everything is created from scratch.
@@ -82,7 +88,7 @@ A: Choose another unique name (add your name/numbers).
 A: YES! Run `terraform destroy` to remove all resources.
 
 **Q: How much does it cost?**  
-A: ~$0.50-$2/month (mostly S3 storage, rest is free tier).
+A: It depends on account eligibility and usage. Charges are not guaranteed to be zero; check AWS Billing.
 
 ---
 
@@ -90,9 +96,9 @@ A: ~$0.50-$2/month (mostly S3 storage, rest is free tier).
 
 You'll be asked:
 
-1. **Bucket name**: Choose something like `yourname-expenses-2026`
-2. **User ID**: Just press Enter (uses `user001`)
-3. **Region**: Just press Enter (uses `ap-south-1`)
+1. **Bucket name**: Enter the unique bucket name configured for this deployment
+2. **User ID**: Keep the configured user ID for existing data
+3. **Region**: Use `ap-south-1`
 4. **Confirm**: Type `yes`
 
 Then wait 3-5 minutes while AWS creates everything!
@@ -103,11 +109,12 @@ Then wait 3-5 minutes while AWS creates everything!
 
 You'll get:
 ```
-Website URL: http://your-bucket.s3-website.ap-south-1.amazonaws.com
-API Endpoint: https://abc123.execute-api.ap-south-1.amazonaws.com
+Website URL: https://dxxxxxxxxxxxxx.cloudfront.net
 ```
 
-**Open the Website URL** → Click "Yes" to initialize → Start tracking!
+**Open the HTTPS Website URL** → Sign in with your invited Cognito user.
+The first sign-in requires setting a permanent password. MFA is disabled.
+The API requires a valid Cognito login.
 
 ---
 
@@ -119,11 +126,9 @@ API Endpoint: https://abc123.execute-api.ap-south-1.amazonaws.com
 
 ---
 
-**Ready? Let's go!**
+**Ready? Review the Terraform plan before approving it.**
 
 ```bash
-cd /Users/kzgh317/Documents/bot/Expense-App
-./scripts/deploy.sh
+cd /path/to/Expense-App
+bash scripts/deploy.sh
 ```
-
-🎉 You'll have your expense tracker running in 15 minutes!

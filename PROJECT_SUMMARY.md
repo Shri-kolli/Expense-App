@@ -4,7 +4,7 @@
 
 A **serverless, cost-optimized personal expense tracking application** designed specifically for your daily expense management needs, based on your existing spreadsheet format.
 
-**Monthly Cost**: ~$0.50 - $2.00 (mostly AWS free tier)
+**Cost**: Depends on usage and AWS free-tier eligibility; not guaranteed to be zero.
 
 ## 📁 Project Structure
 
@@ -76,7 +76,8 @@ Expense-App/
 ### Frontend
 - **HTML5** + **CSS3** (Responsive Design)
 - **Vanilla JavaScript** (No frameworks - faster, simpler)
-- **S3 Static Hosting** (~$0.50/month)
+- **CloudFront HTTPS** with a private S3 origin
+- **Cognito** sign-in (MFA disabled for household convenience)
 
 ### Backend
 - **Python 3.11** on **AWS Lambda** (FREE tier)
@@ -93,9 +94,9 @@ Expense-App/
 ```
 User Browser
     ↓
-S3 (Static Website)
-    ↓
-API Gateway (HTTP API)
+CloudFront HTTPS ──→ Private S3 (frontend)
+    ↓ /api/*
+API Gateway (JWT authorization)
     ↓
 Lambda (Python 3.11)
     ↓
@@ -110,15 +111,8 @@ DynamoDB (NoSQL)
 
 ## 💰 Cost Analysis
 
-| Service | Usage | Free Tier | Expected Cost |
-|---------|-------|-----------|---------------|
-| S3 | <1GB storage | 5GB free | $0.50 |
-| Lambda | <100k requests | 1M free | $0.00 |
-| API Gateway | <50k requests | 1M free | $0.00 |
-| DynamoDB | <1GB data | 25GB free | $0.00 |
-| **TOTAL** | | | **~$0.50-$2** |
-
-**Annual Cost**: ~$6-24 (cheaper than any subscription service!)
+Charges vary with usage, AWS account eligibility, region, and current pricing. Review
+AWS Billing; no fixed monthly amount or zero-cost guarantee is provided.
 
 ## 🚀 Quick Start
 
@@ -185,12 +179,9 @@ Dashboard → Categories → Add/Edit/Delete
 
 ## 🔐 Security Notes
 
-⚠️ **Current Setup**: Minimal security (personal use)
-- No authentication required
-- Anyone with URL can access
-- Suitable for personal, non-sensitive tracking
-
-💡 **For Sensitive Data**: Add AWS Cognito authentication (see DEPLOYMENT.md)
+The deployed app uses HTTPS CloudFront, a private S3 origin, invite-only Cognito
+accounts, and JWT-protected API requests. MFA is disabled for easier household use. The public
+site URL shows the sign-in page; expense data requires authentication.
 
 ## 🛠️ Customization Options
 
