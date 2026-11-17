@@ -1,0 +1,213 @@
+Expense-App/
+│
+├── 📘 Documentation Files
+│   ├── README.md                    # Project overview and introduction
+│   ├── GET_STARTED.md              # Complete getting started guide
+│   ├── QUICKSTART.md               # 15-minute quick deployment
+│   ├── DEPLOYMENT.md               # Detailed deployment instructions
+│   ├── ARCHITECTURE.md             # System architecture & design
+│   ├── FEATURES.md                 # Complete feature documentation
+│   ├── PROJECT_SUMMARY.md          # High-level project summary
+│   └── PROJECT_STRUCTURE.txt       # This file
+│
+├── 🌐 Frontend (Static Website - S3 Hosted)
+│   ├── index.html                   # Main application HTML
+│   │                                  - Dashboard view
+│   │                                  - Add transaction form
+│   │                                  - Transaction history
+│   │                                  - Category management
+│   │
+│   ├── css/
+│   │   └── style.css               # Complete styling
+│   │                                  - Responsive design
+│   │                                  - Modern UI components
+│   │                                  - Color-coded categories
+│   │                                  - Progress bars
+│   │                                  - Modal dialogs
+│   │
+│   └── js/
+│       ├── config.js               # API configuration
+│       │                             - API endpoint URL
+│       │                             - Endpoint paths
+│       │
+│       ├── api.js                  # API helper functions
+│       │                             - GET/POST/PUT/DELETE wrappers
+│       │                             - Error handling
+│       │                             - CORS handling
+│       │
+│       └── app.js                  # Main application logic
+│                                     - Tab navigation
+│                                     - Form handling
+│                                     - Dashboard rendering
+│                                     - Transaction management
+│                                     - Category management
+│                                     - Data formatting
+│
+├── ⚙️ Backend (AWS Lambda Function)
+│   ├── functions/
+│   │   └── main.py                 # Lambda handler (Python 3.11)
+│   │                                 - Category CRUD operations
+│   │                                 - Transaction CRUD operations
+│   │                                 - Monthly summary calculations
+│   │                                 - Carryover balance logic
+│   │                                 - DynamoDB queries
+│   │                                 - Default data initialization
+│   │
+│   └── requirements.txt            # Python dependencies
+│                                     - boto3 (AWS SDK)
+│
+├── 🏗️ Infrastructure (Terraform IaC)
+│   └── terraform/
+│       ├── main.tf                 # Main infrastructure definition
+│       │                             - DynamoDB table
+│       │                             - S3 bucket + website config
+│       │                             - Lambda function
+│       │                             - API Gateway (HTTP API)
+│       │                             - IAM roles & policies
+│       │                             - Permissions
+│       │
+│       └── variables.tf            # Configuration variables
+│                                     - AWS region
+│                                     - S3 bucket name
+│                                     - User ID
+│
+├── 🛠️ Scripts (Automation & Utilities)
+│   ├── deploy.sh                   # One-command full deployment
+│   │                                 - Interactive prompts
+│   │                                 - Terraform init & apply
+│   │                                 - Frontend config update
+│   │                                 - S3 upload
+│   │
+│   ├── update-frontend.sh          # Quick frontend updates
+│   │                                 - S3 sync after HTML/CSS/JS changes
+│   │
+│   ├── update-lambda.sh            # Quick backend updates
+│   │                                 - Package & upload Lambda code
+│   │
+│   └── import-data.py              # CSV data import utility
+│                                     - Parse CSV transactions
+│                                     - Match categories
+│                                     - Bulk import
+│
+└── .gitignore                      # Git ignore rules
+                                      - Terraform state files
+                                      - Python cache
+                                      - AWS credentials
+                                      - Build artifacts
+────────────────────────────────────────────────────────────────
+AWS Resources Created by Terraform:
+────────────────────────────────────
+├── DynamoDB
+│   └── Table: ExpenseTrackerData
+│       ├── Primary Key: PK, SK
+│       ├── GSI1: GSI1PK, GSI1SK (for month queries)
+│       └── On-demand billing
+│
+├── Lambda
+│   └── Function: expense_tracker_api
+│       ├── Runtime: Python 3.11
+│       ├── Handler: main.lambda_handler
+│       ├── Timeout: 30 seconds
+│       └── Memory: 128 MB
+│
+├── API Gateway
+│   └── HTTP API: expense-tracker-api
+│       ├── Route: ANY /{proxy+}
+│       ├── CORS: Enabled
+│       └── Integration: Lambda proxy
+│
+├── S3
+│   └── Bucket: [your-unique-name]
+│       ├── Static website hosting enabled
+│       ├── Public access enabled
+│       └── Index: index.html
+│
+└── IAM
+    ├── Lambda execution role
+    └── DynamoDB access policy
+────────────────────────────────────────────────────────────────
+API Endpoints:
+──────────────
+GET     /categories              # List all categories
+POST    /categories              # Create category
+PUT     /categories              # Update category
+DELETE  /categories              # Delete category
+GET     /transactions            # List all transactions
+GET     /transactions?month=XXX  # Filter by month
+POST    /transactions            # Create transaction
+PUT     /transactions            # Update transaction
+DELETE  /transactions            # Delete transaction
+GET     /summary                 # Current month summary
+GET     /summary?month=XXX       # Specific month summary
+POST    /initialize              # Initialize default data
+────────────────────────────────────────────────────────────────
+File Sizes (Approximate):
+─────────────────────────
+├── main.py         ~15 KB   (Backend logic)
+├── app.js          ~15 KB   (Frontend logic)
+├── style.css       ~8 KB    (Styling)
+├── index.html      ~5 KB    (Structure)
+├── main.tf         ~7 KB    (Infrastructure)
+├── api.js          ~2 KB    (API helpers)
+├── config.js       ~500 B   (Configuration)
+│
+└── Total:          ~52 KB   (Extremely lightweight!)
+────────────────────────────────────────────────────────────────
+Technology Stack:
+─────────────────
+Frontend:
+  - HTML5
+  - CSS3 (Flexbox, Grid, Custom Properties)
+  - Vanilla JavaScript (ES6+)
+  - Fetch API for AJAX
+Backend:
+  - Python 3.11
+  - boto3 (AWS SDK)
+  - AWS Lambda
+Database:
+  - DynamoDB (NoSQL)
+  - Single-table design
+  - Global Secondary Index
+Infrastructure:
+  - Terraform (IaC)
+  - AWS CLI
+  - Bash scripts
+Hosting:
+  - S3 Static Website
+  - API Gateway
+  - CloudWatch Logs
+────────────────────────────────────────────────────────────────
+Default Categories (Pre-configured):
+────────────────────────────────────
+Expense Categories:
+  ⛽ Fuel & Vehicle Expense     (₹3,000/month)
+  🛒 Shopping & Entertainment   (₹10,000/month)
+  🏠 Home Expense              (₹7,000/month)
+  🍔 Food Outside              (₹5,000/month)
+  💰 To Mini                   (₹25,000/month)
+  🌾 Farm Expense              (₹30,000/month)
+  📦 Others                    (No limit)
+  🏦 Loan                      (₹45,777/month)
+Income Categories:
+  💵 Earned - Nidagundi
+  📈 Earned - Stocks
+────────────────────────────────────────────────────────────────
+Monthly Cost Estimate:
+──────────────────────
+S3 Storage:           $0.50
+API Gateway:          $0.00 (within free tier)
+Lambda:               $0.00 (within free tier)
+DynamoDB:             $0.00 (within free tier)
+Data Transfer:        $0.10
+────────────────────
+TOTAL:                ~$0.60-$2.00/month
+────────────────────────────────────────────────────────────────
+Deployment Time:
+────────────────
+Prerequisites:        5 minutes
+Configuration:        2 minutes
+Terraform Deploy:     5 minutes
+Testing:             3 minutes
+────────────────────
+TOTAL:               ~15 minutes
+────────────────────────────────────────────────────────────────

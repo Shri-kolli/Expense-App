@@ -1,0 +1,374 @@
+{
+  "schema": "clarification-questions/v1",
+  "generated_at": "2026-11-17T08:44:18Z",
+  "user_input": "Implement the user's front-end dashboard redesign for mobile usability in this static HTML/CSS/JS expense tracker. Focus: mobile-first page; small compact overall dashboard values at top; category/subcategory spending prominent; below categories, a date-wise calendar/calendar-like month view with daily total expenses; below that transaction history. Keep desktop reasonably usable, preserve existing features (especially prior subcategory quick-add), ensure mobile layout usability. Read relevant project files; edit only frontend and related docs/tests if essential. Do NOT deploy or modify backend/IaC. Validate JavaScript and HTML/CSS as feasible. Report changed files and exact validation. Be bounded; do not make AWS operations.",
+  "title": "Mobile Expense Dashboard Redesign",
+  "assessment_snapshot": {
+    "intro": "The project is a small expense tracker with a static frontend and separate Python backend:",
+    "bullets": [
+      "The requested work is an in-place, mobile-first dashboard redesign with no stack change.",
+      "The desired dashboard order is compact summary values, prominent category/subcategory spending, daily totals in a calendar-like month view, then transaction history.",
+      "Existing behavior, especially subcategory quick-add, must be preserved; backend, infrastructure, deployment, and AWS operations are out of scope."
+    ]
+  },
+  "proposed_outcome": "Redesign the existing static HTML/CSS/JavaScript dashboard for mobile usability while retaining the current stack, preserving existing expense-tracking features (including subcategory quick-add), keeping desktop reasonably usable, and validating the frontend without changing backend or infrastructure.",
+  "scope": [
+    "frontend",
+    "generic"
+  ],
+  "status": "awaiting_answers",
+  "questions": [
+    {
+      "id": "F1",
+      "kit": "frontend",
+      "field": "target.framework",
+      "title": "Frontend framework",
+      "question": "Confirm the frontend framework/runtime and version to retain or target. The supplied facts describe a static HTML/CSS/JavaScript frontend and say there is no stack change.",
+      "importance": "required",
+      "impact": 4,
+      "recommended": "Keep existing static HTML/CSS/JavaScript; no framework or version change",
+      "default": null,
+      "prefilled": true,
+      "prefilled_value": "Keep existing static HTML/CSS/JavaScript; no framework or version change",
+      "answer": null,
+      "depends_on": null,
+      "options": [
+        {
+          "value": "Keep existing static HTML/CSS/JavaScript; no framework or version change",
+          "label": "Keep existing static HTML/CSS/JavaScript; no framework or version change"
+        },
+        {
+          "value": "React 18",
+          "label": "React 18"
+        },
+        {
+          "value": "Vue 3",
+          "label": "Vue 3"
+        },
+        {
+          "value": "Angular 17",
+          "label": "Angular 17"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "F2",
+      "kit": "frontend",
+      "field": "target.component_library",
+      "title": "UI component library",
+      "question": "Should the redesign use a UI/component library, or keep the existing native HTML/CSS/JavaScript approach? If using a library, specify its name and version.",
+      "importance": "required",
+      "impact": 4,
+      "recommended": "Keep existing native HTML/CSS/JavaScript; no added UI library",
+      "default": null,
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": null,
+      "depends_on": null,
+      "options": [
+        {
+          "value": "Keep existing native HTML/CSS/JavaScript; no added UI library",
+          "label": "Keep existing native HTML/CSS/JavaScript; no added UI library"
+        },
+        {
+          "value": "Use an existing project library (specify via Other)",
+          "label": "Use an existing project library (specify via Other)"
+        },
+        {
+          "value": "Add a UI library (specify name and version via Other)",
+          "label": "Add a UI library (specify name and version via Other)"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "F3",
+      "kit": "frontend",
+      "field": "visual.screenshots",
+      "title": "Visual references",
+      "question": "Provide screenshots or a screen recording of the current dashboard and, if available, the intended mobile redesign (file paths or URLs). If unavailable, say so.",
+      "importance": "required",
+      "impact": 5,
+      "recommended": null,
+      "default": null,
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": null,
+      "depends_on": null,
+      "type": "text",
+      "options": []
+    },
+    {
+      "id": "F4",
+      "kit": "frontend",
+      "field": "visual.design_system",
+      "title": "Design system",
+      "question": "What design system, brand, or design-token source should guide the redesign? You may provide a link/path or confirm that existing styles and CSS custom properties should be retained.",
+      "importance": "required",
+      "impact": 4,
+      "recommended": null,
+      "default": "match existing pixel-by-pixel",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": null,
+      "depends_on": null,
+      "type": "text",
+      "options": []
+    },
+    {
+      "id": "F5",
+      "kit": "frontend",
+      "field": "compliance.accessibility",
+      "title": "Accessibility target",
+      "question": "Which accessibility standard should the dashboard target?",
+      "importance": "recommended",
+      "impact": 4,
+      "recommended": "WCAG 2.1 AA",
+      "default": "WCAG 2.1 AA",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": null,
+      "depends_on": null,
+      "options": [
+        {
+          "value": "WCAG 2.1 AA",
+          "label": "WCAG 2.1 AA"
+        },
+        {
+          "value": "WCAG 2.2 AA",
+          "label": "WCAG 2.2 AA"
+        },
+        {
+          "value": "Section 508",
+          "label": "Section 508"
+        },
+        {
+          "value": "No specific standard",
+          "label": "No specific standard"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "F6",
+      "kit": "frontend",
+      "field": "compatibility.browsers",
+      "title": "Browser targets",
+      "question": "Which browsers and versions should the redesigned dashboard support?",
+      "importance": "recommended",
+      "impact": 3,
+      "recommended": "Modern evergreen (Chrome, Firefox, Safari, Edge — latest 2 major versions)",
+      "default": "modern evergreen (Chrome, Firefox, Safari, Edge — latest 2 major versions)",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": null,
+      "depends_on": null,
+      "options": [
+        {
+          "value": "Modern evergreen (Chrome, Firefox, Safari, Edge — latest 2 major versions)",
+          "label": "Modern evergreen (Chrome, Firefox, Safari, Edge — latest 2 major versions)"
+        },
+        {
+          "value": "Specific browsers/versions (specify via Other)",
+          "label": "Specific browsers/versions (specify via Other)"
+        },
+        {
+          "value": "Match existing project support targets",
+          "label": "Match existing project support targets"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "F7",
+      "kit": "frontend",
+      "field": "responsive.breakpoints",
+      "title": "Responsive strategy",
+      "question": "Confirm the responsive strategy and any required viewport breakpoints. The request specifies mobile-first and that desktop should remain reasonably usable.",
+      "importance": "recommended",
+      "impact": 5,
+      "recommended": "Mobile-first; desktop reasonably usable; retain existing breakpoints",
+      "default": "mobile-first using existing breakpoints detected from codebase",
+      "prefilled": true,
+      "prefilled_value": "Mobile-first; desktop reasonably usable; retain existing breakpoints",
+      "answer": null,
+      "depends_on": null,
+      "options": [
+        {
+          "value": "Mobile-first; desktop reasonably usable; retain existing breakpoints",
+          "label": "Mobile-first; desktop reasonably usable; retain existing breakpoints"
+        },
+        {
+          "value": "Mobile-first with specified breakpoints (provide via Other)",
+          "label": "Mobile-first with specified breakpoints (provide via Other)"
+        },
+        {
+          "value": "Separate mobile and desktop layouts (specify via Other)",
+          "label": "Separate mobile and desktop layouts (specify via Other)"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "F8",
+      "kit": "frontend",
+      "field": "i18n.locales",
+      "title": "Locales",
+      "question": "Are any specific languages/locales in scope for the dashboard redesign?",
+      "importance": "optional",
+      "impact": 2,
+      "recommended": null,
+      "default": "preserve current locales; keep existing i18n library if present",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": null,
+      "depends_on": null,
+      "type": "text",
+      "options": []
+    },
+    {
+      "id": "F9",
+      "kit": "frontend",
+      "field": "state_mgmt.preference",
+      "title": "State management",
+      "question": "Do you have a client-side state-management preference, or should the existing frontend state pattern be retained?",
+      "importance": "optional",
+      "impact": 2,
+      "recommended": null,
+      "default": "preserve existing pattern if identifiable; otherwise recommend minimal (component state + server-state library)",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": null,
+      "depends_on": null,
+      "type": "text",
+      "options": []
+    },
+    {
+      "id": "F10",
+      "kit": "frontend",
+      "field": "routing.preference",
+      "title": "Routing strategy",
+      "question": "Should the redesign retain an existing routing strategy or introduce a particular router?",
+      "importance": "optional",
+      "impact": 2,
+      "recommended": null,
+      "default": "use the de-facto router for the chosen target framework",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": null,
+      "depends_on": null,
+      "type": "text",
+      "options": []
+    },
+    {
+      "id": "G1",
+      "kit": "generic",
+      "field": "success.definition",
+      "title": "Definition of done",
+      "question": "Confirm the definition of success for this redesign.",
+      "importance": "required",
+      "impact": 5,
+      "recommended": null,
+      "default": "feature parity with the current system; all existing user-facing behaviors preserved",
+      "prefilled": true,
+      "prefilled_value": "Deliver a mobile-first dashboard with compact overall values at the top, prominent category/subcategory spending, a calendar-like month view with daily totals, and transaction history below; preserve existing features (especially subcategory quick-add), keep desktop reasonably usable, and validate JavaScript and HTML/CSS as feasible.",
+      "answer": null,
+      "depends_on": null,
+      "type": "text",
+      "options": []
+    },
+    {
+      "id": "G2",
+      "kit": "generic",
+      "field": "out_of_scope",
+      "title": "Out-of-scope boundaries",
+      "question": "Confirm what must remain out of scope.",
+      "importance": "recommended",
+      "impact": 4,
+      "recommended": "Backend changes",
+      "default": "no explicit exclusions; agent will infer from project structure",
+      "prefilled": true,
+      "prefilled_value": "Backend changes; Infrastructure / IaC changes; Deployment or AWS operations; Work outside the frontend and essential related docs/tests",
+      "answer": null,
+      "depends_on": null,
+      "options": [
+        {
+          "value": "Backend changes",
+          "label": "Backend changes"
+        },
+        {
+          "value": "Infrastructure / IaC changes",
+          "label": "Infrastructure / IaC changes"
+        },
+        {
+          "value": "Deployment or AWS operations",
+          "label": "Deployment or AWS operations"
+        },
+        {
+          "value": "Work outside the frontend and essential related docs/tests",
+          "label": "Work outside the frontend and essential related docs/tests"
+        }
+      ],
+      "allow_other": true,
+      "type": "multi_select"
+    },
+    {
+      "id": "G3",
+      "kit": "generic",
+      "field": "existing_tests.posture",
+      "title": "Existing test policy",
+      "question": "How should existing tests be treated during validation?",
+      "importance": "recommended",
+      "impact": 3,
+      "recommended": "must pass",
+      "default": "must pass",
+      "prefilled": false,
+      "prefilled_value": null,
+      "answer": null,
+      "depends_on": null,
+      "options": [
+        {
+          "value": "must pass",
+          "label": "Must pass"
+        },
+        {
+          "value": "can rewrite",
+          "label": "Can rewrite with equivalent coverage"
+        },
+        {
+          "value": "ignore",
+          "label": "Ignore existing tests and write new tests"
+        },
+        {
+          "value": "partial: specify suites via Other",
+          "label": "Partial: specify suites via Other"
+        }
+      ],
+      "allow_other": true,
+      "type": "single_select"
+    },
+    {
+      "id": "G5",
+      "kit": "generic",
+      "field": "constraints.additional",
+      "title": "Additional constraints",
+      "question": "List any additional requirements, dependencies, compliance rules, or operational constraints not already captured. You may accept the prefilled default.",
+      "importance": "optional",
+      "impact": 2,
+      "recommended": null,
+      "default": "None beyond the decisions listed in this specification.",
+      "prefilled": true,
+      "prefilled_value": "None beyond the decisions listed in this specification.",
+      "answer": null,
+      "depends_on": null,
+      "type": "text",
+      "options": []
+    }
+  ]
+}
