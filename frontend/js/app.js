@@ -6,7 +6,12 @@ let selectedTodoDate = getLocalDateString(new Date());
 let todoCalendarMonth = selectedTodoDate.slice(0, 7);
 let todosForCalendar = [];
 let selectedDateTodos = [];
+let repeatTodosForToday = [];
+let repeatTodoDate = getLocalDateString(new Date());
 let pendingHalfDoneTodo = null;
+let businessTransactions = {};
+let businessTransactionContext = null;
+let editingTransactionBusinessId = null;
 
 // Initialize app
 document.addEventListener('DOMContentLoaded', async () => {
@@ -46,6 +51,9 @@ function setupTabs() {
     tabBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const tabName = btn.dataset.tab;
+            if (tabName !== 'add-transaction' && businessTransactionContext) {
+                clearBusinessTransactionContext();
+            }
 
             // Remove active class from all
             tabBtns.forEach(b => b.classList.remove('active'));
@@ -63,6 +71,8 @@ function setupTabs() {
             } else if (tabName === 'categories') {
                 loadCategoriesPage();
             } else if (tabName === 'todos') {
+                document.getElementById('repeatTodosPage').hidden = true;
+                document.getElementById('todoOverviewPage').hidden = false;
                 loadTodoPage();
             }
         });
@@ -92,7 +102,15 @@ function setupForms() {
     // Type radio change - update categories
     document.querySelectorAll('input[name="type"]').forEach(radio => {
         radio.addEventListener('change', (e) => {
-            populateCategoryDropdown(e.target.value);
+            if (businessTransactionContext) {
+                businessTransactionContext.type = e.target.value;
+                const business = categories.find(
+                    category => category.categoryId === businessTransactionContext.businessId
+                );
+                document.getElementById('businessTransactionLabel').textContent =
+                    `${business?.name || 'Business'} · Add ${e.target.value}`;
+            }
+            populateCategoryDropdown(e.target.value, businessTransactionContext?.businessId || null);
             updateTransactionSubcategories();
         });
     });
@@ -100,6 +118,10 @@ function setupForms() {
     document.getElementById('category').addEventListener('change', updateTransactionSubcategories);
     document.getElementById('categoryType').addEventListener('change', updateCategoryFormFields);
     document.getElementById('parentCategory').addEventListener('change', updateCategoryFormFields);
+    document.getElementById('categoryBusiness').addEventListener('change', updateCategoryFormFields);
+    document.getElementById('businessCategories').addEventListener('click', handleBusinessCategoryClick);
+    document.getElementById('businessDashboard').addEventListener('click', handleBusinessCategoryClick);
+    document.getElementById('leaveBusinessTransaction').addEventListener('click', clearBusinessTransactionContext);
     document.getElementById('previousMonth').addEventListener('click', () => changeDashboardMonth(-1));
     document.getElementById('nextMonth').addEventListener('click', () => changeDashboardMonth(1));
     document.getElementById('todoDate').value = selectedTodoDate;
@@ -115,6 +137,11 @@ function setupForms() {
     document.getElementById('todoForm').addEventListener('submit', handleAddTodo);
     document.getElementById('todoTasksList').addEventListener('click', handleTodoAction);
     document.getElementById('todoTasksList').addEventListener('submit', handleTodoSubtaskSubmit);
+    document.getElementById('repeatTodosBack').addEventListener('click', closeRepeatTodosPage);
+    document.getElementById('repeatTodosPage').addEventListener('click', handleRepeatTodoPageClick);
+    document.getElementById('repeatTodoForm').addEventListener('submit', handleRepeatTodoSubmit);
+    document.getElementById('closeRepeatTodoModal').addEventListener('click', closeRepeatTodoModal);
+    document.getElementById('cancelRepeatTodo').addEventListener('click', closeRepeatTodoModal);
     document.getElementById('todoCalendar').addEventListener('click', handleTodoCalendarClick);
     document.getElementById('halfDoneForm').addEventListener('submit', handleSaveHalfDone);
     document.getElementById('closeHalfDoneModal').addEventListener('click', closeHalfDoneModal);
@@ -148,6 +175,8 @@ async function loadDashboard() {
 
     // Update category spending bars
     displayCategorySpending(summary.categorySpending);
+    await loadBusinessTransactions();
+    renderBusinessDashboard();
 
     // Load the month's daily spending and transaction history.
     const transactionsData = await getTransactions(currentMonth);
@@ -169,14 +198,16 @@ async function loadTodoPage() {
     document.getElementById('todoCalendarMonthLabel').textContent =
         formatMonthDisplay(todoCalendarMonth);
 
-    const [monthData, rewardData] = await Promise.all([
+    const [monthData, rewardData, repeatData] = await Promise.all([
         getTodosForMonth(todoCalendarMonth),
-        getTodoReward(getLocalDateString(new Date()).slice(0, 7))
+        getTodoReward(getLocalDateString(new Date()).slice(0, 7)),
+        getRepeatTodos(selectedTodoDate)
     ]);
 
     if (!monthData || !Array.isArray(monthData.todos)) return;
     todosForCalendar = monthData.todos;
     selectedDateTodos = todosForCalendar.filter(todo => todo.date === selectedTodoDate);
+    repeatTodosForToday = repeatData?.repeatTodos || [];
     renderTodoTasks();
     renderTodoCalendar();
     updateTodoAddLimit();
@@ -210,6 +241,7 @@ function renderTodoTasks() {
             <section class="todo-owner-group todo-owner-${owner.id}" aria-labelledby="todo-${owner.id}-title">
                 <div class="todo-owner-heading">
                     <h3 id="todo-${owner.id}-title">${owner.label} <span aria-hidden="true">${owner.heart}</span></h3>
+                    <button type="button" class="todo-repeat-link" data-open-repeat="${owner.id}">Repeat-Todo</button>
                     <span>${completed}/${ownerTodos.length} done · ${ownerTodos.length}/6 tasks</span>
                 </div>
                 <div class="todo-owner-list">${cards}</div>
@@ -323,7 +355,208 @@ async function handleAddTodo(event) {
     titleInput.focus();
 }
 
+async function openRepeatTodosPage() {
+    repeatTodoDate = getLocalDateString(new Date());
+    document.getElementById('todoOverviewPage').hidden = true;
+    document.getElementById('repeatTodosPage').hidden = false;
+    await loadRepeatTodosPage();
+}
+
+function closeRepeatTodosPage() {
+    document.getElementById('repeatTodosPage').hidden = true;
+    document.getElementById('todoOverviewPage').hidden = false;
+    loadTodoPage();
+}
+
+async function loadRepeatTodosPage() {
+    document.getElementById('repeatTodosDate').textContent =
+        `For ${formatTodoDate(repeatTodoDate)}`;
+    const data = await getRepeatTodos(repeatTodoDate);
+    if (!data || !Array.isArray(data.repeatTodos)) return;
+    repeatTodosForToday = data.repeatTodos;
+    renderRepeatTodos();
+    const reward = await getTodoReward(getLocalDateString(new Date()).slice(0, 7));
+    if (reward) renderTodoReward(reward);
+}
+
+function renderRepeatTodos() {
+    const ownerLists = {
+        wifey: document.getElementById('repeatWifeyTasks'),
+        hubby: document.getElementById('repeatHubbyTasks')
+    };
+    for (const [owner, container] of Object.entries(ownerLists)) {
+        const ownerTasks = repeatTodosForToday.filter(task => task.owner === owner);
+        ownerTasks.sort((first, second) =>
+            Number(second.scheduledToday) - Number(first.scheduledToday)
+        );
+        const todayTasks = ownerTasks.filter(task => task.scheduledToday);
+        const otherTasks = ownerTasks.filter(task => !task.scheduledToday);
+        container.innerHTML = ownerTasks.length
+            ? `
+                <section class="repeat-task-group" aria-label="Tasks due today">
+                    <h4>Due today</h4>
+                    ${todayTasks.length
+                        ? todayTasks.map(createRepeatTodoCard).join('')
+                        : '<p class="todo-muted">No tasks due today.</p>'}
+                </section>
+                ${otherTasks.length ? `
+                    <section class="repeat-task-group repeat-task-group-other" aria-label="Other repeat tasks">
+                        <h4>Other days</h4>
+                        ${otherTasks.map(createRepeatTodoCard).join('')}
+                    </section>
+                ` : ''}
+            `
+            : '<p class="todo-empty">No repeat tasks yet. Add one whenever you like.</p>';
+        const countLabel = document.getElementById(
+            owner === 'wifey' ? 'repeatWifeyTitle' : 'repeatHubbyTitle'
+        );
+        const person = owner === 'wifey' ? 'Wifey ♡' : 'Hubby ♥';
+        countLabel.textContent =
+            `${person} — repeat tasks for today (${todayTasks.filter(task => task.status === 'completed').length}/${todayTasks.length} done)`;
+    }
+}
+
+function createRepeatTodoCard(task) {
+    const daysLabel = formatRepeatDays(task.days);
+    const statusLabel = task.scheduledToday
+        ? (task.status === 'completed' ? 'Done' : 'To do')
+        : daysLabel;
+    return `
+        <article class="repeat-task-card ${task.status === 'completed' ? 'repeat-task-completed' : ''}"
+                 data-repeat-task-id="${escapeHtml(task.repeatTaskId)}">
+            <button type="button" class="todo-task-summary repeat-task-summary"
+                    data-repeat-action="expand" aria-expanded="false">
+                <span class="todo-status-dot" aria-hidden="true"></span>
+                <span class="todo-task-title">${escapeHtml(task.title)}</span>
+                <span class="todo-status-label">${escapeHtml(statusLabel)}</span>
+            </button>
+            <div class="repeat-task-details" hidden>
+                <p class="todo-muted">Repeats: ${escapeHtml(daysLabel)}</p>
+                <div class="todo-card-actions">
+                    ${task.scheduledToday ? `
+                        <button type="button" class="todo-action-button ${task.status === 'completed' ? '' : 'todo-done-button'}"
+                                data-repeat-action="toggle-status">
+                            ${task.status === 'completed' ? 'Undo done' : '✓ Done'}
+                        </button>
+                    ` : ''}
+                    <button type="button" class="todo-action-button" data-repeat-action="edit">Edit</button>
+                    <button type="button" class="todo-action-button todo-delete-button" data-repeat-action="delete">Remove</button>
+                </div>
+            </div>
+        </article>
+    `;
+}
+
+function formatRepeatDays(days) {
+    const labels = { mon: 'Mon', tue: 'Tue', wed: 'Wed', thu: 'Thu', fri: 'Fri', sat: 'Sat', sun: 'Sun' };
+    return days.map(day => labels[day]).join(', ');
+}
+
+function openRepeatTodoModal(owner, task = null) {
+    const form = document.getElementById('repeatTodoForm');
+    form.reset();
+    document.getElementById('repeatTaskId').value = task?.repeatTaskId || '';
+    document.getElementById('repeatTaskOwner').value = owner;
+    document.getElementById('repeatTaskTitle').value = task?.title || '';
+    document.getElementById('repeatTodoModalTitle').textContent =
+        task ? 'Edit repeat task' : `Add ${owner === 'wifey' ? 'Wifey’s' : 'Hubby’s'} repeat task`;
+    const selectedDays = task?.days || [repeatDayForDate(repeatTodoDate)];
+    form.querySelectorAll('input[name="repeatDay"]').forEach(input => {
+        input.checked = selectedDays.includes(input.value);
+    });
+    document.getElementById('repeatTodoModal').classList.add('active');
+    document.getElementById('repeatTaskTitle').focus();
+}
+
+async function handleRepeatTodoSubmit(event) {
+    event.preventDefault();
+    const days = Array.from(
+        document.querySelectorAll('#repeatTodoForm input[name="repeatDay"]:checked'),
+        input => input.value
+    );
+    if (!days.length) {
+        alert('Select at least one day for this repeat task.');
+        return;
+    }
+    const repeatTaskId = document.getElementById('repeatTaskId').value;
+    const taskData = {
+        title: document.getElementById('repeatTaskTitle').value,
+        owner: document.getElementById('repeatTaskOwner').value,
+        days,
+        date: repeatTodoDate
+    };
+    const result = repeatTaskId
+        ? await updateRepeatTodo({ ...taskData, repeatTaskId })
+        : await addRepeatTodo(taskData);
+    if (!result) return;
+    closeRepeatTodoModal();
+    await loadRepeatTodosPage();
+}
+
+function closeRepeatTodoModal() {
+    document.getElementById('repeatTodoModal').classList.remove('active');
+}
+
+async function handleRepeatTodoPageClick(event) {
+    const toggleOwner = event.target.closest('[data-repeat-toggle]');
+    if (toggleOwner) {
+        const content = document.getElementById(
+            toggleOwner.dataset.repeatToggle === 'wifey' ? 'repeatWifeyContent' : 'repeatHubbyContent'
+        );
+        content.hidden = !content.hidden;
+        toggleOwner.setAttribute('aria-expanded', String(!content.hidden));
+        return;
+    }
+
+    const addButton = event.target.closest('[data-repeat-owner]');
+    if (addButton) {
+        openRepeatTodoModal(addButton.dataset.repeatOwner);
+        return;
+    }
+
+    const actionButton = event.target.closest('[data-repeat-action]');
+    if (!actionButton) return;
+    const card = actionButton.closest('[data-repeat-task-id]');
+    const task = repeatTodosForToday.find(item => item.repeatTaskId === card?.dataset.repeatTaskId);
+    if (!task) return;
+
+    const action = actionButton.dataset.repeatAction;
+    if (action === 'expand') {
+        const details = card.querySelector('.repeat-task-details');
+        details.hidden = !details.hidden;
+        card.classList.toggle('todo-card-expanded', !details.hidden);
+        actionButton.setAttribute('aria-expanded', String(!details.hidden));
+        return;
+    }
+    if (action === 'edit') {
+        openRepeatTodoModal(task.owner, task);
+        return;
+    }
+    if (action === 'delete') {
+        if (!confirm(`Remove "${task.title}" from today and future days?`)) return;
+        const result = await deleteRepeatTodo({
+            repeatTaskId: task.repeatTaskId,
+            date: repeatTodoDate
+        });
+        if (result) await loadRepeatTodosPage();
+        return;
+    }
+    if (action === 'toggle-status') {
+        const result = await updateRepeatTodoStatus({
+            repeatTaskId: task.repeatTaskId,
+            date: repeatTodoDate,
+            completed: task.status !== 'completed'
+        });
+        if (result) await loadRepeatTodosPage();
+    }
+}
+
 async function handleTodoAction(event) {
+    const repeatLink = event.target.closest('[data-open-repeat]');
+    if (repeatLink) {
+        await openRepeatTodosPage();
+        return;
+    }
     const button = event.target.closest('[data-action]');
     if (!button) return;
     const card = button.closest('[data-todo-id]');
@@ -372,6 +605,13 @@ async function handleTodoAction(event) {
         const result = await updateTodo({ todoId: todo.todoId, date: todo.date, status });
         if (result) await loadTodoPage();
     }
+}
+
+function repeatDayForDate(dateString) {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][
+        new Date(year, month - 1, day).getDay()
+    ];
 }
 
 async function handleTodoSubtaskSubmit(event) {
@@ -663,17 +903,27 @@ async function handleAddTransaction() {
         date,
         description
     };
+    if (businessTransactionContext) {
+        transactionData.businessId = businessTransactionContext.businessId;
+    }
 
     const result = await addTransaction(transactionData);
 
     if (result) {
         alert('Transaction added successfully!');
+        const returnToBusiness = Boolean(businessTransactionContext);
+        const returnTab = businessTransactionContext?.returnTab || 'categories';
         document.getElementById('transactionForm').reset();
         document.getElementById('date').valueAsDate = new Date();
+        if (returnToBusiness) {
+            clearBusinessTransactionContext();
+            document.querySelector(`.tab-btn[data-tab="${returnTab}"]`).click();
+            return;
+        }
         updateTransactionSubcategories();
 
         // Reload dashboard
-        loadDashboard();
+        await loadDashboard();
     }
 }
 
@@ -693,7 +943,7 @@ async function loadTransactions() {
     container.innerHTML = transactionsData.transactions.map(txn => createTransactionCard(txn, true)).join('');
 }
 
-function createTransactionCard(txn, showActions = false) {
+function createTransactionCard(txn, showActions = false, businessId = null) {
     const isIncome = txn.type === 'income';
     const sign = isIncome ? '+' : '-';
 
@@ -709,17 +959,18 @@ function createTransactionCard(txn, showActions = false) {
             </div>
             ${showActions ? `
                 <div class="transaction-actions">
-                    <button onclick="editTransaction('${txn.transactionId}', '${txn.SK}')" class="btn btn-small">Edit</button>
-                    <button onclick="confirmDeleteTransaction('${txn.transactionId}')" class="btn btn-small btn-danger">Delete</button>
+                    <button onclick="editTransaction('${txn.transactionId}', '${txn.SK}', '${businessId || ''}')" class="btn btn-small">Edit</button>
+                    <button onclick="confirmDeleteTransaction('${txn.transactionId}', '${businessId || ''}')" class="btn btn-small btn-danger">Delete</button>
                 </div>
             ` : ''}
         </div>
     `;
 }
 
-async function editTransaction(transactionId, sk) {
+async function editTransaction(transactionId, sk, businessId = '') {
     // Get transaction data
-    const transactionsData = await getTransactions();
+    editingTransactionBusinessId = businessId || null;
+    const transactionsData = await getTransactions(null, editingTransactionBusinessId);
     const txn = transactionsData.transactions.find(t => t.transactionId === transactionId);
 
     if (!txn) {
@@ -736,7 +987,12 @@ async function editTransaction(transactionId, sk) {
 
     // Populate categories for edit
     const categorySelect = document.getElementById('editCategory');
-    const relevantCategories = categories.filter(c => c.type === txn.type);
+    const relevantCategories = categories.filter(c =>
+        c.type === txn.type &&
+        (editingTransactionBusinessId
+            ? c.businessId === editingTransactionBusinessId
+            : !c.businessId)
+    );
     categorySelect.innerHTML = relevantCategories.map(cat =>
         `<option value="${cat.categoryId}" ${cat.categoryId === txn.categoryId ? 'selected' : ''}>
             ${cat.parentCategoryId
@@ -768,6 +1024,7 @@ async function handleUpdateTransaction() {
         amount,
         categoryId,
         categoryName,
+        ...(editingTransactionBusinessId ? { businessId: editingTransactionBusinessId } : {}),
         date,
         description
     };
@@ -776,13 +1033,18 @@ async function handleUpdateTransaction() {
 
     if (result) {
         alert('Transaction updated successfully!');
+        const businessId = editingTransactionBusinessId;
         closeEditTransactionModal();
-        loadTransactions();
-        loadDashboard();
+        if (businessId) {
+            await loadCategoriesPage();
+        } else {
+            await loadTransactions();
+            await loadDashboard();
+        }
     }
 }
 
-async function confirmDeleteTransaction(transactionId) {
+async function confirmDeleteTransaction(transactionId, businessId = '') {
     if (!confirm('Are you sure you want to delete this transaction?')) {
         return;
     }
@@ -791,13 +1053,18 @@ async function confirmDeleteTransaction(transactionId) {
 
     if (result) {
         alert('Transaction deleted successfully!');
-        loadTransactions();
-        loadDashboard();
+        if (businessId) {
+            await loadCategoriesPage();
+        } else {
+            await loadTransactions();
+            await loadDashboard();
+        }
     }
 }
 
 function closeEditTransactionModal() {
     document.getElementById('editTransactionModal').classList.remove('active');
+    editingTransactionBusinessId = null;
 }
 
 // ================ CATEGORIES ================
@@ -806,17 +1073,21 @@ async function loadCategories() {
     const data = await getCategories();
     if (data && data.categories) {
         categories = data.categories;
-        populateCategoryDropdown('expense');
+        populateCategoryDropdown('expense', businessTransactionContext?.businessId || null);
     }
 }
 
-function populateCategoryDropdown(type) {
+function populateCategoryDropdown(type, businessId = null) {
     const select = document.getElementById('category');
-    const relevantCategories = categories.filter(c => c.type === type && !c.parentCategoryId);
+    const relevantCategories = categories.filter(c =>
+        c.type === type &&
+        !c.parentCategoryId &&
+        (businessId ? c.businessId === businessId : !c.businessId)
+    );
 
     select.innerHTML = '<option value="">Select Category</option>' +
         relevantCategories.map(cat =>
-            `<option value="${cat.categoryId}">${cat.icon} ${cat.name}</option>`
+            `<option value="${escapeHtml(cat.categoryId)}">${escapeHtml(cat.icon)} ${escapeHtml(cat.name)}</option>`
         ).join('');
 }
 
@@ -826,12 +1097,17 @@ function updateTransactionSubcategories(selectedId = '') {
     const group = document.getElementById('subcategoryGroup');
     const select = document.getElementById('subcategory');
     const children = categories.filter(
-        category => category.type === type && category.parentCategoryId === categoryId
+        category =>
+            category.type === type &&
+            category.parentCategoryId === categoryId &&
+            (businessTransactionContext
+                ? category.businessId === businessTransactionContext.businessId
+                : !category.businessId)
     );
 
     select.innerHTML = '<option value="">Use category directly</option>' +
         children.map(child =>
-            `<option value="${child.categoryId}">${child.icon} ${child.name}</option>`
+            `<option value="${escapeHtml(child.categoryId)}">${escapeHtml(child.icon)} ${escapeHtml(child.name)}</option>`
         ).join('');
     select.value = children.some(child => child.categoryId === selectedId) ? selectedId : '';
     group.hidden = children.length === 0;
@@ -852,9 +1128,16 @@ async function loadCategoriesPage() {
 
     const expenseContainer = document.getElementById('expenseCategories');
     const incomeContainer = document.getElementById('incomeCategories');
+    const businessContainer = document.getElementById('businessCategories');
 
-    const expenseCategories = categories.filter(c => c.type === 'expense' && !c.parentCategoryId);
-    const incomeCategories = categories.filter(c => c.type === 'income');
+    const expenseCategories = categories.filter(c =>
+        c.type === 'expense' && !c.parentCategoryId && !c.businessId
+    );
+    const incomeCategories = categories.filter(c =>
+        c.type === 'income' && !c.parentCategoryId && !c.businessId
+    );
+    const businesses = getBusinessCategories();
+    await loadBusinessTransactions();
 
     expenseContainer.innerHTML = expenseCategories.length > 0
         ? expenseCategories.map(cat => `
@@ -869,6 +1152,174 @@ async function loadCategoriesPage() {
     incomeContainer.innerHTML = incomeCategories.length > 0
         ? incomeCategories.map(cat => createCategoryCard(cat)).join('')
         : '<p class="empty-state">No income categories</p>';
+    businessContainer.innerHTML = businesses.length
+        ? businesses.map(createBusinessCard).join('')
+        : '<p class="empty-state">No businesses yet. Add one using + Add Category.</p>';
+    document.querySelector('.businesses-month-label').textContent =
+        `Monthly totals for ${formatMonthDisplay(currentMonth)} · business entries stay separate from personal totals`;
+}
+
+function getBusinessCategories() {
+    return categories.filter(category => category.type === 'business');
+}
+
+async function loadBusinessTransactions() {
+    const businesses = getBusinessCategories();
+    const transactionsByBusiness = await Promise.all(businesses.map(async business => {
+        const data = await getTransactions(currentMonth, business.categoryId);
+        return [business.categoryId, data?.transactions || []];
+    }));
+    businessTransactions = Object.fromEntries(transactionsByBusiness);
+}
+
+function renderBusinessDashboard() {
+    document.getElementById('businessDashboardMonth').textContent =
+        `Separate from personal totals · ${formatMonthDisplay(currentMonth)}`;
+    const businesses = getBusinessCategories();
+    document.getElementById('businessDashboard').innerHTML = businesses.length
+        ? businesses.map(business => createBusinessCard(business, 'dashboard')).join('')
+        : '<p class="empty-state">No businesses yet. Add one from Categories.</p>';
+}
+
+function createBusinessCard(business, view = 'category') {
+    const businessId = business.categoryId;
+    const transactions = businessTransactions[businessId] || [];
+    const incomeTotal = transactions
+        .filter(txn => txn.type === 'income')
+        .reduce((total, txn) => total + Number(txn.amount), 0);
+    const expenseTotal = transactions
+        .filter(txn => txn.type === 'expense')
+        .reduce((total, txn) => total + Number(txn.amount), 0);
+    const businessCategories = categories.filter(category => category.businessId === businessId);
+    const incomeCategories = businessCategories.filter(category => category.type === 'income');
+    const expenseCategories = businessCategories.filter(category => category.type === 'expense');
+    const safeId = escapeHtml(businessId);
+    const detailsId = `business-details-${view}-${safeId}`;
+
+    return `
+        <article class="business-card" data-business-id="${safeId}">
+            <button type="button" class="business-summary" data-business-action="toggle"
+                    aria-expanded="false" aria-controls="${detailsId}">
+                <span class="business-summary-name">
+                    <span class="category-icon">${escapeHtml(business.icon || '🏢')}</span>
+                    <strong>${escapeHtml(business.name)}</strong>
+                </span>
+                <span class="business-summary-totals">
+                    <span class="business-income-total" title="Monthly income">↑ ${formatCurrency(incomeTotal)}</span>
+                    <span class="business-expense-total" title="Monthly expenses">↓ ${formatCurrency(expenseTotal)}</span>
+                </span>
+                <span aria-hidden="true" class="business-chevron">⌄</span>
+            </button>
+            <div class="business-details" id="${detailsId}" hidden>
+                <div class="business-detail-actions">
+                    <button type="button" class="btn btn-small"
+                            data-business-action="add-transaction" data-type="income">＋ Add income</button>
+                    <button type="button" class="btn btn-small"
+                            data-business-action="add-transaction" data-type="expense">＋ Add expense</button>
+                    <button type="button" class="btn btn-small"
+                            data-business-action="add-category" data-type="income">＋ Income category</button>
+                    <button type="button" class="btn btn-small"
+                            data-business-action="add-category" data-type="expense">＋ Expense category</button>
+                    <button type="button" class="btn btn-small"
+                            onclick="editCategory('${safeId}')">Edit business</button>
+                </div>
+                <div class="business-category-grid">
+                    <section class="business-category-group business-income-group">
+                        <h4>Income categories</h4>
+                        ${createBusinessCategoryList(incomeCategories, transactions)}
+                    </section>
+                    <section class="business-category-group business-expense-group">
+                        <h4>Expense categories</h4>
+                        ${createBusinessCategoryList(expenseCategories, transactions)}
+                    </section>
+                </div>
+                <section class="business-ledger">
+                    <h4>Transactions this month</h4>
+                    ${transactions.length
+                        ? transactions.map(txn => createTransactionCard(txn, true, businessId)).join('')
+                        : '<p class="empty-state">No business transactions this month.</p>'}
+                </section>
+            </div>
+        </article>
+    `;
+}
+
+function createBusinessCategoryList(businessCategories, transactions) {
+    return businessCategories.length
+        ? `<ul>${businessCategories.map(category => {
+            const total = transactions
+                .filter(txn => txn.categoryId === category.categoryId)
+                .reduce((sum, txn) => sum + Number(txn.amount), 0);
+            return `
+                <li>
+                    <span>${escapeHtml(category.icon)} ${escapeHtml(category.name)}</span>
+                    <span>${formatCurrency(total)}</span>
+                    <span class="business-category-actions">
+                        <button type="button" class="btn btn-small"
+                                onclick="editCategory('${escapeHtml(category.categoryId)}')">Edit</button>
+                        <button type="button" class="btn btn-small btn-danger"
+                                onclick="confirmDeleteCategory('${escapeHtml(category.categoryId)}')">Delete</button>
+                    </span>
+                </li>
+            `;
+        }).join('')}</ul>`
+        : '<p class="todo-muted">No categories yet.</p>';
+}
+
+async function handleBusinessCategoryClick(event) {
+    const actionButton = event.target.closest('[data-business-action]');
+    if (!actionButton) return;
+    const businessCard = actionButton.closest('[data-business-id]');
+    const businessId = businessCard?.dataset.businessId;
+    const business = categories.find(category => category.categoryId === businessId);
+    if (!business) return;
+
+    if (actionButton.dataset.businessAction === 'toggle') {
+        const details = businessCard.querySelector('.business-details');
+        details.hidden = !details.hidden;
+        actionButton.setAttribute('aria-expanded', String(!details.hidden));
+        businessCard.classList.toggle('business-card-expanded', !details.hidden);
+        return;
+    }
+
+    if (actionButton.dataset.businessAction === 'add-transaction') {
+        startBusinessTransaction(business, actionButton.dataset.type);
+        return;
+    }
+
+    if (actionButton.dataset.businessAction === 'add-category') {
+        showAddCategoryModal(actionButton.dataset.type, businessId);
+    }
+}
+
+function startBusinessTransaction(business, type) {
+    businessTransactionContext = {
+        businessId: business.categoryId,
+        type,
+        returnTab: document.querySelector('.tab-btn[data-tab="dashboard"]').classList.contains('active')
+            ? 'dashboard'
+            : 'categories'
+    };
+    document.querySelector(`input[name="type"][value="${type}"]`).checked = true;
+    populateCategoryDropdown(type, business.categoryId);
+    updateTransactionSubcategories();
+    document.getElementById('businessTransactionLabel').textContent =
+        `${business.name} · Add ${type}`;
+    document.getElementById('businessTransactionContext').hidden = false;
+    document.getElementById('date').valueAsDate = new Date();
+    document.querySelector('.tab-btn[data-tab="add-transaction"]').click();
+    if (document.getElementById('category').options.length <= 1) {
+        alert(`Add a ${type} category for ${business.name} before recording a transaction.`);
+    }
+}
+
+function clearBusinessTransactionContext() {
+    businessTransactionContext = null;
+    document.getElementById('businessTransactionContext').hidden = true;
+    document.getElementById('businessTransactionLabel').textContent = '';
+    document.querySelector('input[name="type"][value="expense"]').checked = true;
+    populateCategoryDropdown('expense');
+    updateTransactionSubcategories();
 }
 
 function createCategoryCard(cat, parent = null) {
@@ -898,13 +1349,16 @@ function createCategoryCard(cat, parent = null) {
     `;
 }
 
-function showAddCategoryModal() {
+function showAddCategoryModal(type = 'expense', businessId = '') {
     document.getElementById('categoryModalTitle').textContent = 'Add Category';
     document.getElementById('categoryForm').reset();
     document.getElementById('editCategoryId').value = '';
+    document.getElementById('categoryType').value = type;
     document.getElementById('categoryIcon').value = '💰';
     document.getElementById('categoryColor').value = '#4CAF50';
     document.getElementById('budgetPeriod').value = 'monthly';
+    populateBusinessCategoryDropdown();
+    document.getElementById('categoryBusiness').value = businessId;
     populateParentCategoryDropdown();
     updateCategoryFormFields();
     document.getElementById('categoryModal').classList.add('active');
@@ -921,6 +1375,8 @@ function editCategory(categoryId) {
     document.getElementById('monthlyLimit').value = cat.monthlyLimit;
     document.getElementById('categoryIcon').value = cat.icon;
     document.getElementById('categoryColor').value = cat.color;
+    populateBusinessCategoryDropdown();
+    document.getElementById('categoryBusiness').value = cat.businessId || '';
     populateParentCategoryDropdown();
     document.getElementById('parentCategory').value = cat.parentCategoryId || '';
     document.getElementById('budgetPeriod').value = cat.budgetPeriod || 'monthly';
@@ -935,6 +1391,7 @@ function populateParentCategoryDropdown() {
     const categoryId = document.getElementById('editCategoryId').value;
     const parents = categories.filter(category =>
         category.type === 'expense' &&
+        !category.businessId &&
         !category.parentCategoryId &&
         category.categoryId !== categoryId
     );
@@ -945,18 +1402,41 @@ function populateParentCategoryDropdown() {
 }
 
 function updateCategoryFormFields() {
-    const isExpense = document.getElementById('categoryType').value === 'expense';
-    const isSubcategory = isExpense && Boolean(document.getElementById('parentCategory').value);
+    const categoryType = document.getElementById('categoryType').value;
+    const businessId = document.getElementById('categoryBusiness').value;
+    const isExpense = categoryType === 'expense';
+    const isBusinessCategory = categoryType === 'business';
+    const isSubcategory = isExpense && !businessId &&
+        Boolean(document.getElementById('parentCategory').value);
+    document.getElementById('categoryBusinessGroup').hidden = isBusinessCategory;
+    document.getElementById('categoryBusiness').disabled = isBusinessCategory;
+    document.getElementById('categoryBusiness').required = false;
     document.getElementById('parentCategoryGroup').hidden = !isExpense;
-    document.getElementById('categoryMonthlyLimitGroup').hidden = !isExpense || isSubcategory;
+    document.getElementById('parentCategoryGroup').hidden = !isExpense || Boolean(businessId);
+    document.getElementById('categoryMonthlyLimitGroup').hidden =
+        !isExpense || isSubcategory || Boolean(businessId);
     document.getElementById('subcategoryBudgetGroup').hidden = !isSubcategory;
     document.getElementById('budgetAmount').required = isSubcategory;
+}
+
+function populateBusinessCategoryDropdown() {
+    const select = document.getElementById('categoryBusiness');
+    const selected = select.value;
+    const businesses = categories.filter(category => category.type === 'business');
+    select.innerHTML = '<option value="">Personal category</option>' +
+        businesses.map(business =>
+            `<option value="${escapeHtml(business.categoryId)}">${escapeHtml(business.icon)} ${escapeHtml(business.name)}</option>`
+        ).join('');
+    if (businesses.some(business => business.categoryId === selected)) {
+        select.value = selected;
+    }
 }
 
 async function handleSaveCategory() {
     const categoryId = document.getElementById('editCategoryId').value;
     const name = document.getElementById('categoryName').value;
     const type = document.getElementById('categoryType').value;
+    const businessId = type === 'business' ? '' : document.getElementById('categoryBusiness').value;
     const parentCategoryId = type === 'expense'
         ? document.getElementById('parentCategory').value
         : '';
@@ -970,7 +1450,8 @@ async function handleSaveCategory() {
         monthlyLimit,
         icon,
         color,
-        parentCategoryId: parentCategoryId || null
+        parentCategoryId: parentCategoryId || null,
+        businessId: businessId || null
     };
     if (parentCategoryId) {
         categoryData.budgetPeriod = document.getElementById('budgetPeriod').value;
@@ -1062,6 +1543,7 @@ window.onclick = function(event) {
     const categoryModal = document.getElementById('categoryModal');
     const editModal = document.getElementById('editTransactionModal');
     const halfDoneModal = document.getElementById('halfDoneModal');
+    const repeatTodoModal = document.getElementById('repeatTodoModal');
 
     if (event.target === categoryModal) {
         closeCategoryModal();
@@ -1071,5 +1553,8 @@ window.onclick = function(event) {
     }
     if (event.target === halfDoneModal) {
         closeHalfDoneModal();
+    }
+    if (event.target === repeatTodoModal) {
+        closeRepeatTodoModal();
     }
 };

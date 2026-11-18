@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Personal Expense Tracker</title>
-    <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" href="css/style.css?v=20261118-2">
 </head>
 <body>
     <main id="authScreen" class="auth-screen">
@@ -61,6 +61,14 @@
                 <div id="categoryBars"></div>
             </div>
 
+            <section class="businesses-section" aria-labelledby="businessDashboardTitle">
+                <div class="businesses-dashboard-heading">
+                    <h2 id="businessDashboardTitle">Businesses</h2>
+                    <span id="businessDashboardMonth"></span>
+                </div>
+                <div id="businessDashboard"></div>
+            </section>
+
             <section class="calendar-section" aria-labelledby="calendarTitle">
                 <div class="calendar-heading">
                     <h2 id="calendarTitle">Daily spending</h2>
@@ -85,6 +93,7 @@
         </div>
 
         <section id="todos" class="tab-content">
+            <div id="todoOverviewPage">
             <section class="todo-reward-card" aria-label="This month's rewards">
                 <h2 id="todoRewardMonth">Nov rewards</h2>
                 <div class="todo-reward-breakdown" id="todoRewardBreakdown"></div>
@@ -140,12 +149,53 @@
                 </div>
                 <div id="todoCalendar" class="todo-calendar" role="grid" aria-label="Todo days"></div>
             </section>
+            </div>
+
+            <section id="repeatTodosPage" class="repeat-todos-page" aria-labelledby="repeatTodosTitle" hidden>
+                <div class="repeat-page-heading">
+                    <button id="repeatTodosBack" type="button" class="todo-action-button">‹ Back to todos</button>
+                    <div>
+                        <h2 id="repeatTodosTitle">Repeat tasks</h2>
+                        <p id="repeatTodosDate" class="todo-muted"></p>
+                    </div>
+                </div>
+                <div class="repeat-owner-sections">
+                    <section class="repeat-owner-group todo-owner-wifey" aria-labelledby="repeatWifeyTitle">
+                        <button type="button" class="repeat-owner-toggle" aria-expanded="false"
+                                aria-controls="repeatWifeyContent" data-repeat-toggle="wifey">
+                            <span id="repeatWifeyTitle">Wifey ♡ — repeat tasks for today</span>
+                            <span aria-hidden="true">⌄</span>
+                        </button>
+                        <div id="repeatWifeyContent" class="repeat-owner-content" hidden>
+                            <div id="repeatWifeyTasks" class="repeat-task-list"></div>
+                            <button type="button" class="btn btn-primary repeat-add-button"
+                                    data-repeat-owner="wifey">＋ Add repeat task</button>
+                        </div>
+                    </section>
+                    <section class="repeat-owner-group todo-owner-hubby" aria-labelledby="repeatHubbyTitle">
+                        <button type="button" class="repeat-owner-toggle" aria-expanded="false"
+                                aria-controls="repeatHubbyContent" data-repeat-toggle="hubby">
+                            <span id="repeatHubbyTitle">Hubby ♥ — repeat tasks for today</span>
+                            <span aria-hidden="true">⌄</span>
+                        </button>
+                        <div id="repeatHubbyContent" class="repeat-owner-content" hidden>
+                            <div id="repeatHubbyTasks" class="repeat-task-list"></div>
+                            <button type="button" class="btn btn-primary repeat-add-button"
+                                    data-repeat-owner="hubby">＋ Add repeat task</button>
+                        </div>
+                    </section>
+                </div>
+            </section>
         </section>
 
         <!-- Add Transaction Tab -->
         <div id="add-transaction" class="tab-content">
             <div class="form-container">
                 <h2>Add Transaction</h2>
+                <p id="businessTransactionContext" class="business-transaction-context" role="status" hidden>
+                    <span id="businessTransactionLabel"></span>
+                    <button id="leaveBusinessTransaction" type="button" class="btn btn-small">Use personal ledger</button>
+                </p>
                 <form id="transactionForm">
                     <div class="form-group">
                         <label>Type</label>
@@ -215,6 +265,12 @@
                 <button onclick="showAddCategoryModal()" class="btn btn-primary">+ Add Category</button>
             </div>
 
+            <section class="businesses-section" aria-labelledby="businessesTitle">
+                <h3 id="businessesTitle">Businesses</h3>
+                <p class="businesses-month-label"></p>
+                <div id="businessCategories"></div>
+            </section>
+
             <div class="categories-grid">
                 <div class="category-section">
                     <h3>Expense Categories</h3>
@@ -244,6 +300,13 @@
                     <select id="categoryType" required>
                         <option value="expense">Expense</option>
                         <option value="income">Income</option>
+                        <option value="business">Business</option>
+                    </select>
+                </div>
+                <div class="form-group" id="categoryBusinessGroup" hidden>
+                    <label for="categoryBusiness">Business (optional)</label>
+                    <select id="categoryBusiness">
+                        <option value="">Personal category</option>
                     </select>
                 </div>
                 <div class="form-group" id="parentCategoryGroup" hidden>
@@ -339,10 +402,42 @@
         </div>
     </div>
 
+    <div id="repeatTodoModal" class="modal">
+        <div class="modal-content" role="dialog" aria-modal="true" aria-labelledby="repeatTodoModalTitle">
+            <button type="button" class="close" id="closeRepeatTodoModal" aria-label="Close">&times;</button>
+            <h2 id="repeatTodoModalTitle">Add repeat task</h2>
+            <form id="repeatTodoForm">
+                <input type="hidden" id="repeatTaskId">
+                <input type="hidden" id="repeatTaskOwner">
+                <div class="form-group">
+                    <label for="repeatTaskTitle">Task name</label>
+                    <input type="text" id="repeatTaskTitle" maxlength="160" required>
+                </div>
+                <fieldset class="repeat-days-fieldset">
+                    <legend>Repeat on</legend>
+                    <div class="repeat-day-options">
+                        <label><input type="checkbox" name="repeatDay" value="mon"> Mon</label>
+                        <label><input type="checkbox" name="repeatDay" value="tue"> Tue</label>
+                        <label><input type="checkbox" name="repeatDay" value="wed"> Wed</label>
+                        <label><input type="checkbox" name="repeatDay" value="thu"> Thu</label>
+                        <label><input type="checkbox" name="repeatDay" value="fri"> Fri</label>
+                        <label><input type="checkbox" name="repeatDay" value="sat"> Sat</label>
+                        <label><input type="checkbox" name="repeatDay" value="sun"> Sun</label>
+                    </div>
+                    <p class="todo-muted">Select every day for a daily task.</p>
+                </fieldset>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary">Save repeat task</button>
+                    <button type="button" class="btn" id="cancelRepeatTodo">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <script src="js/auth-config.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/config.js"></script>
-    <script src="js/api.js"></script>
-    <script src="js/app.js"></script>
+    <script src="js/api.js?v=20261118-2"></script>
+    <script src="js/app.js?v=20261118-2"></script>
 </body>
 </html>

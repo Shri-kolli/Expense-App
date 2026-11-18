@@ -1,7 +1,8 @@
 import json
 import os
 import boto3
-from datetime import datetime
+import calendar
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from boto3.dynamodb.conditions import Key
 from boto3.dynamodb.types import TypeSerializer
@@ -10,11 +11,14 @@ import uuid
 
 # Initialize DynamoDB
 dynamodb = boto3.resource('dynamodb')
+dynamodb_client = boto3.client('dynamodb')
 table = dynamodb.Table(os.environ['TABLE_NAME'])
 USER_ID = os.environ.get('USER_ID', 'user001')
 TODO_OWNERS = {'hubby', 'wifey'}
 TODO_DAILY_LIMIT = 6
 TODO_REWARD_PER_DAY = Decimal('100')
+REPEAT_TODO_MINIMUM = 5
+REPEAT_DAYS = ('mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun')
 serializer = TypeSerializer()
 
 class TodoConflictError(Exception):
@@ -77,8 +81,8 @@ def lambda_handler(event, context):
         # Transactions
         elif '/transactions' in raw_path:
             if method == 'GET':
-                month = event.get('queryStringParameters', {}).get('month') if event.get('queryStringParameters') else None
-                return get_transactions(month)
+                query = event.get('queryStringParameters') or {}
+                return get_transactions(query.get('month'), query.get('businessId'))
             elif method == 'POST':
                 return add_transaction(body)
             elif method == 'PUT':
@@ -92,6 +96,17 @@ def lambda_handler(event, context):
             query = event.get('queryStringParameters') or {}
             if raw_path.endswith('/todos/reward') and method == 'GET':
                 return get_todo_reward(query.get('month'))
+            if raw_path.endswith('/todos/repeat/status') and method == 'PUT':
+                return update_repeat_todo_status(body)
+            if raw_path.endswith('/todos/repeat'):
+                if method == 'GET':
+                    return get_repeat_todos(query.get('date'))
+                if method == 'POST':
+                    return add_repeat_todo(body)
+                if method == 'PUT':
+                    return update_repeat_todo(body)
+                if method == 'DELETE':
+                    return delete_repeat_todo(body)
             if raw_path.endswith('/todos/half-done') and method == 'POST':
                 return mark_todo_half_done(body)
             if method == 'GET':
@@ -166,6 +181,12 @@ def validate_todo_title(value, label='Todo title'):
 def todo_key(todo_date, todo_id):
     return {'PK': f'USER#{USER_ID}', 'SK': f'TODO#{todo_date}#{todo_id}'}
 
+def repeat_todo_key(todo_id):
+    return {'PK': f'USER#{USER_ID}', 'SK': f'REPEATTASK#{todo_id}'}
+
+def repeat_todo_status_key(todo_date, todo_id):
+    return {'PK': f'USER#{USER_ID}', 'SK': f'REPEATDONE#{todo_date}#{todo_id}'}
+
 def serialize_item(item):
     return {name: serializer.serialize(value) for name, value in item.items()}
 
@@ -180,8 +201,9 @@ def reserve_todo_slot(todo_date, owner):
         'Update': {
             'TableName': table.name,
             'Key': todo_counter_key(todo_date, owner),
-            'UpdateExpression': 'SET taskCount = if_not_exists(taskCount, :zero) + :one',
-            'ConditionExpression': 'attribute_not_exists(taskCount) OR taskCount < :limit',
+            'UpdateExpression': 'SET #taskCount = if_not_exists(#taskCount, :zero) + :one',
+            'ConditionExpression': 'attribute_not_exists(#taskCount) OR #taskCount < :limit',
+            'ExpressionAttributeNames': {'#taskCount': 'taskCount'},
             'ExpressionAttributeValues': {
                 ':zero': {'N': '0'},
                 ':one': {'N': '1'},
@@ -192,7 +214,7 @@ def reserve_todo_slot(todo_date, owner):
 
 def transact_todo_write(operations, conflict_message):
     try:
-        table.meta.client.transact_write_items(TransactItems=operations)
+        dynamodb_client.transact_write_items(TransactItems=operations)
     except ClientError as error:
         if error.response.get('Error', {}).get('Code') == 'TransactionCanceledException':
             raise TodoConflictError(conflict_message) from error
@@ -211,6 +233,58 @@ def query_todos(prefix):
             break
         query_args['ExclusiveStartKey'] = last_key
     return items
+
+def validate_repeat_days(value):
+    if not isinstance(value, list) or not value:
+        raise ValueError('Select at least one repeat day')
+    if any(day not in REPEAT_DAYS for day in value) or len(set(value)) != len(value):
+        raise ValueError('Repeat days must be unique weekdays')
+    return [day for day in REPEAT_DAYS if day in value]
+
+def repeat_version_for_date(task, task_date):
+    for version in reversed(task.get('scheduleHistory', [])):
+        if version['startsOn'] <= task_date and (
+            version.get('endsOn') is None or task_date <= version['endsOn']
+        ):
+            return version
+    return None
+
+def repeat_version_matches_date(version, task_date):
+    weekday = REPEAT_DAYS[datetime.strptime(task_date, '%Y-%m-%d').weekday()]
+    return weekday in version['days']
+
+def get_repeat_todos(todo_date):
+    todo_date = validate_todo_date(todo_date)
+    tasks = query_todos('REPEATTASK#')
+    statuses = {
+        item['repeatTaskId']: item
+        for item in query_todos(f'REPEATDONE#{todo_date}#')
+    }
+    daily_tasks = []
+    for task in tasks:
+        if not task.get('active'):
+            continue
+        version = repeat_version_for_date(task, todo_date)
+        if not version:
+            continue
+        scheduled = repeat_version_matches_date(version, todo_date)
+        daily_tasks.append({
+            'repeatTaskId': task['repeatTaskId'],
+            'owner': task['owner'],
+            'title': version['title'],
+            'days': version['days'],
+            'scheduledToday': scheduled,
+            'status': 'completed' if statuses.get(task['repeatTaskId'], {}).get('completed') else 'open',
+            'date': todo_date
+        })
+    daily_tasks.sort(
+        key=lambda item: (
+            item['owner'],
+            not item['scheduledToday'],
+            item['title'].casefold()
+        )
+    )
+    return cors_response(200, {'date': todo_date, 'repeatTodos': daily_tasks})
 
 def get_todos(todo_date=None, month=None):
     if todo_date:
@@ -236,21 +310,204 @@ def get_todo_reward(month):
             counts['completed'] += 1
 
     owner_rewards = {'hubby': Decimal('0'), 'wifey': Decimal('0')}
+    regular_rewards = {'hubby': Decimal('0'), 'wifey': Decimal('0')}
     qualifying_days = {'hubby': 0, 'wifey': 0}
     for (_, owner), counts in daily_owner_counts.items():
         if counts['total'] >= 4:
             qualifying_days[owner] += 1
-            owner_rewards[owner] += (
+            regular_rewards[owner] += (
                 TODO_REWARD_PER_DAY * counts['completed'] / counts['total']
             )
+
+    repeat_rewards = {'hubby': Decimal('0'), 'wifey': Decimal('0')}
+    qualifying_repeat_days = {'hubby': 0, 'wifey': 0}
+    repeat_tasks = query_todos('REPEATTASK#')
+    completed_repeat_occurrences = {
+        item['SK']
+        for item in query_todos(f'REPEATDONE#{month}-')
+        if item.get('completed')
+    }
+    year, month_number = (int(part) for part in month.split('-'))
+    days_in_month = calendar.monthrange(year, month_number)[1]
+    repeat_daily_counts = {}
+    for task in repeat_tasks:
+        for day in range(1, days_in_month + 1):
+            task_date = f'{month}-{day:02d}'
+            version = repeat_version_for_date(task, task_date)
+            if not version or not repeat_version_matches_date(version, task_date):
+                continue
+            counts = repeat_daily_counts.setdefault(
+                (task_date, task['owner']), {'total': 0, 'completed': 0}
+            )
+            counts['total'] += 1
+            if repeat_todo_status_key(task_date, task['repeatTaskId'])['SK'] in completed_repeat_occurrences:
+                counts['completed'] += 1
+
+    for (_, owner), counts in repeat_daily_counts.items():
+        if counts['total'] >= REPEAT_TODO_MINIMUM:
+            qualifying_repeat_days[owner] += 1
+            repeat_rewards[owner] += (
+                TODO_REWARD_PER_DAY * counts['completed'] / counts['total']
+            )
+
+    for owner in TODO_OWNERS:
+        owner_rewards[owner] = regular_rewards[owner] + repeat_rewards[owner]
 
     return cors_response(200, {
         'month': month,
         'rewardPerDay': TODO_REWARD_PER_DAY,
         'minimumTasksPerPersonPerDay': 4,
+        'minimumRepeatTasksPerPersonPerDay': REPEAT_TODO_MINIMUM,
+        'regularRewards': regular_rewards,
+        'repeatRewards': repeat_rewards,
+        'qualifyingRepeatDays': qualifying_repeat_days,
         'rewards': owner_rewards,
         'qualifyingDays': qualifying_days,
         'totalReward': owner_rewards['hubby'] + owner_rewards['wifey']
+    })
+
+def add_repeat_todo(body):
+    title = validate_todo_title(body.get('title'), 'Repeat task title')
+    owner = body.get('owner')
+    if owner not in TODO_OWNERS:
+        raise ValueError('Repeat task owner must be hubby or wifey')
+    days = validate_repeat_days(body.get('days'))
+    start_date = validate_todo_date(body.get('date'))
+    now = datetime.now().isoformat()
+    repeat_task_id = str(uuid.uuid4())
+    task = {
+        **repeat_todo_key(repeat_task_id),
+        'repeatTaskId': repeat_task_id,
+        'owner': owner,
+        'title': title,
+        'days': days,
+        'active': True,
+        'scheduleHistory': [{
+            'title': title,
+            'days': days,
+            'startsOn': start_date,
+            'endsOn': None
+        }],
+        'createdAt': now,
+        'updatedAt': now
+    }
+    table.put_item(
+        Item=task,
+        ConditionExpression='attribute_not_exists(PK) AND attribute_not_exists(SK)'
+    )
+    return cors_response(201, {'repeatTodo': task})
+
+def update_repeat_todo(body):
+    repeat_task_id = validate_todo_id(body.get('repeatTaskId'))
+    effective_date = validate_todo_date(body.get('date'))
+    title = validate_todo_title(body.get('title'), 'Repeat task title')
+    days = validate_repeat_days(body.get('days'))
+    key = repeat_todo_key(repeat_task_id)
+    task = table.get_item(Key=key).get('Item')
+    if not task or not task.get('active'):
+        return cors_response(404, {'error': 'Repeat task not found'})
+
+    history = task.get('scheduleHistory', [])
+    if not history or effective_date < history[-1]['startsOn']:
+        raise ValueError('Repeat task changes must take effect on or after its current schedule')
+    current_version = {
+        'title': title,
+        'days': days,
+        'startsOn': effective_date,
+        'endsOn': None
+    }
+    if history[-1]['startsOn'] == effective_date:
+        history[-1] = current_version
+    else:
+        history[-1]['endsOn'] = (
+            datetime.strptime(effective_date, '%Y-%m-%d') - timedelta(days=1)
+        ).strftime('%Y-%m-%d')
+        history.append(current_version)
+
+    now = datetime.now().isoformat()
+    try:
+        updated = table.update_item(
+            Key=key,
+            UpdateExpression='SET title = :title, days = :days, scheduleHistory = :history, updatedAt = :updated',
+            ConditionExpression='attribute_exists(PK) AND #active = :true AND updatedAt = :previous',
+            ExpressionAttributeNames={'#active': 'active'},
+            ExpressionAttributeValues={
+                ':title': title,
+                ':days': days,
+                ':history': history,
+                ':updated': now,
+                ':true': True,
+                ':previous': task['updatedAt']
+            },
+            ReturnValues='ALL_NEW'
+        )['Attributes']
+    except ClientError as error:
+        if error.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
+            raise TodoConflictError('This repeat task changed. Refresh and try again') from error
+        raise
+    return cors_response(200, {'repeatTodo': updated})
+
+def delete_repeat_todo(body):
+    repeat_task_id = validate_todo_id(body.get('repeatTaskId'))
+    effective_date = validate_todo_date(body.get('date'))
+    key = repeat_todo_key(repeat_task_id)
+    task = table.get_item(Key=key).get('Item')
+    if not task or not task.get('active'):
+        return cors_response(404, {'error': 'Repeat task not found'})
+
+    history = task.get('scheduleHistory', [])
+    if not history or effective_date < history[-1]['startsOn']:
+        raise ValueError('Repeat task changes must take effect on or after its current schedule')
+    history[-1]['endsOn'] = (
+        datetime.strptime(effective_date, '%Y-%m-%d') - timedelta(days=1)
+    ).strftime('%Y-%m-%d')
+    now = datetime.now().isoformat()
+    try:
+        table.update_item(
+            Key=key,
+            UpdateExpression='SET #active = :false, scheduleHistory = :history, updatedAt = :updated',
+            ConditionExpression='attribute_exists(PK) AND #active = :true AND updatedAt = :previous',
+            ExpressionAttributeNames={'#active': 'active'},
+            ExpressionAttributeValues={
+                ':false': False,
+                ':true': True,
+                ':history': history,
+                ':updated': now,
+                ':previous': task['updatedAt']
+            }
+        )
+    except ClientError as error:
+        if error.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
+            raise TodoConflictError('This repeat task changed. Refresh and try again') from error
+        raise
+    return cors_response(200, {'message': 'Repeat task removed'})
+
+def update_repeat_todo_status(body):
+    repeat_task_id = validate_todo_id(body.get('repeatTaskId'))
+    todo_date = validate_todo_date(body.get('date'))
+    completed = body.get('completed')
+    if not isinstance(completed, bool):
+        raise ValueError('Repeat task completion must be true or false')
+    task = table.get_item(Key=repeat_todo_key(repeat_task_id)).get('Item')
+    version = repeat_version_for_date(task or {}, todo_date)
+    if not version or not repeat_version_matches_date(version, todo_date):
+        return cors_response(404, {'error': 'Repeat task is not scheduled for this day'})
+
+    key = repeat_todo_status_key(todo_date, repeat_task_id)
+    if completed:
+        table.put_item(Item={
+            **key,
+            'repeatTaskId': repeat_task_id,
+            'date': todo_date,
+            'completed': True,
+            'updatedAt': datetime.now().isoformat()
+        })
+    else:
+        table.delete_item(Key=key)
+    return cors_response(200, {
+        'repeatTaskId': repeat_task_id,
+        'date': todo_date,
+        'completed': completed
     })
 
 def add_todo(body):
@@ -359,8 +616,9 @@ def delete_todo(body):
             'Update': {
                 'TableName': table.name,
                 'Key': todo_counter_key(todo_date, owner),
-                'UpdateExpression': 'SET taskCount = taskCount - :one',
-                'ConditionExpression': 'taskCount >= :one',
+                'UpdateExpression': 'SET #taskCount = #taskCount - :one',
+                'ConditionExpression': '#taskCount >= :one',
+                'ExpressionAttributeNames': {'#taskCount': 'taskCount'},
                 'ExpressionAttributeValues': {':one': {'N': '1'}}
             }
         },
@@ -445,11 +703,12 @@ def get_categories():
 def add_category(body):
     """Add a new category"""
     category_type = body.get('type')
-    if category_type not in ('income', 'expense'):
-        raise ValueError('Category type must be income or expense')
+    if category_type not in ('income', 'expense', 'business'):
+        raise ValueError('Category type must be income, expense, or business')
 
     category_id = str(uuid.uuid4())[:8]
     parent_category_id = body.get('parentCategoryId')
+    business_id = validate_category_business(body, category_type, parent_category_id)
     budget = get_category_budget(body, category_type, parent_category_id)
 
     item = {
@@ -458,7 +717,7 @@ def add_category(body):
         'categoryId': category_id,
         'name': body['name'],
         'type': category_type,
-        'monthlyLimit': budget['monthlyLimit'],
+        'monthlyLimit': budget.get('monthlyLimit', Decimal('0')),
         'icon': body.get('icon', '💰'),
         'color': body.get('color', '#4CAF50'),
         'createdAt': datetime.now().isoformat()
@@ -470,15 +729,20 @@ def add_category(body):
             'budgetPeriod': budget['budgetPeriod'],
             'budgetAmount': budget['budgetAmount']
         })
+    if business_id:
+        item['businessId'] = business_id
 
     table.put_item(Item=item)
     return cors_response(200, {'message': 'Category added', 'category': item})
 
 def get_category_budget(body, category_type, parent_category_id):
     """Validate a category budget and return its monthly equivalent."""
+    if category_type in ('income', 'business'):
+        return {'monthlyLimit': Decimal('0')}
+
     if parent_category_id:
-        if category_type != 'expense':
-            raise ValueError('Income categories cannot have subcategories')
+        if category_type != 'expense' or body.get('businessId'):
+            raise ValueError('Only personal expense categories can have subcategories')
 
         parent = table.get_item(
             Key={
@@ -518,15 +782,44 @@ def get_category_budget(body, category_type, parent_category_id):
         raise ValueError('Monthly limit cannot be negative')
     return {'monthlyLimit': monthly_limit}
 
+def validate_category_business(body, category_type, parent_category_id):
+    """Validate a category's optional business ownership."""
+    business_id = body.get('businessId')
+    if category_type == 'business':
+        if business_id or parent_category_id:
+            raise ValueError('A business cannot belong to another business or category')
+        return None
+    if not business_id:
+        return None
+    if parent_category_id:
+        raise ValueError('Business categories cannot be personal subcategories')
+    if business_id == body.get('categoryId'):
+        raise ValueError('A business cannot be its own category owner')
+
+    business = table.get_item(
+        Key={'PK': f'USER#{USER_ID}', 'SK': f'CATEGORY#{business_id}'}
+    ).get('Item')
+    if not business or business.get('type') != 'business':
+        raise ValueError('Select an existing business')
+    return business_id
+
 def update_category(body):
     """Update an existing category"""
     category_id = body['categoryId']
     category_type = body.get('type')
-    if category_type not in ('income', 'expense'):
-        raise ValueError('Category type must be income or expense')
+    if category_type not in ('income', 'expense', 'business'):
+        raise ValueError('Category type must be income, expense, or business')
 
     parent_category_id = body.get('parentCategoryId')
+    business_id = validate_category_business(body, category_type, parent_category_id)
     budget = get_category_budget(body, category_type, parent_category_id)
+    existing = table.get_item(
+        Key={'PK': f'USER#{USER_ID}', 'SK': f'CATEGORY#{category_id}'}
+    ).get('Item')
+    if category_type == 'business' and existing and (
+        existing.get('businessId') or existing.get('parentCategoryId')
+    ):
+        raise ValueError('Create a separate business instead of converting a category into a business')
     if parent_category_id == category_id:
         raise ValueError('A category cannot be its own parent')
 
@@ -537,29 +830,69 @@ def update_category(body):
     )
     if child_response.get('Items') and (parent_category_id or category_type != 'expense'):
         raise ValueError('A category with subcategories must remain a top-level expense category')
+    if existing and existing.get('type') == 'business' and category_type != 'business':
+        business_child_response = table.query(
+            KeyConditionExpression=Key('PK').eq(f'USER#{USER_ID}') & Key('SK').begins_with('CATEGORY#'),
+            FilterExpression='businessId = :business_id',
+            ExpressionAttributeValues={':business_id': category_id}
+        )
+        business_transactions = table.query(
+            KeyConditionExpression=Key('PK').eq(f'USER#{USER_ID}') & Key('SK').begins_with('TRANSACTION#'),
+            FilterExpression='businessId = :business_id',
+            ExpressionAttributeValues={':business_id': category_id}
+        )
+        if business_child_response.get('Items') or business_transactions.get('Items'):
+            raise ValueError('A business with categories or transactions must remain a business')
+    if existing and (existing.get('businessId') or business_id) and (
+        existing.get('businessId') != business_id or existing.get('type') != category_type
+    ):
+        category_transactions = table.query(
+            KeyConditionExpression=Key('PK').eq(f'USER#{USER_ID}') & Key('SK').begins_with('TRANSACTION#'),
+            FilterExpression='categoryId = :category_id',
+            ExpressionAttributeValues={':category_id': category_id}
+        )
+        if category_transactions.get('Items'):
+            raise ValueError("Remove this category's transactions before changing its type or business")
 
-    update_expr = (
-        "SET #n = :name, #t = :type, monthlyLimit = :limit, "
-        "icon = :icon, color = :color"
-    )
+    set_expressions = [
+        '#n = :name',
+        '#t = :type',
+        'monthlyLimit = :limit',
+        'icon = :icon',
+        'color = :color'
+    ]
     expr_attr_names = {'#n': 'name', '#t': 'type'}
     expr_attr_values = {
         ':name': body['name'],
         ':type': category_type,
-        ':limit': budget['monthlyLimit'],
+        ':limit': budget.get('monthlyLimit', Decimal('0')),
         ':icon': body.get('icon', '💰'),
         ':color': body.get('color', '#4CAF50')
     }
 
     if parent_category_id:
-        update_expr += ', parentCategoryId = :parent_id, budgetPeriod = :period, budgetAmount = :amount'
+        set_expressions.extend([
+            'parentCategoryId = :parent_id',
+            'budgetPeriod = :period',
+            'budgetAmount = :amount'
+        ])
         expr_attr_values.update({
             ':parent_id': parent_category_id,
             ':period': budget['budgetPeriod'],
             ':amount': budget['budgetAmount']
         })
-    else:
-        update_expr += ' REMOVE parentCategoryId, budgetPeriod, budgetAmount'
+    if business_id:
+        set_expressions.append('businessId = :business_id')
+        expr_attr_values[':business_id'] = business_id
+
+    update_expr = 'SET ' + ', '.join(set_expressions)
+    remove_expressions = []
+    if not parent_category_id:
+        remove_expressions.extend(['parentCategoryId', 'budgetPeriod', 'budgetAmount'])
+    if not business_id:
+        remove_expressions.append('businessId')
+    if remove_expressions:
+        update_expr += ' REMOVE ' + ', '.join(remove_expressions)
 
     table.update_item(
         Key={'PK': f'USER#{USER_ID}', 'SK': f'CATEGORY#{category_id}'},
@@ -572,11 +905,27 @@ def update_category(body):
 
 def delete_category(category_id):
     """Delete a category"""
+    category = table.get_item(
+        Key={'PK': f'USER#{USER_ID}', 'SK': f'CATEGORY#{category_id}'}
+    ).get('Item')
     children = table.query(
         KeyConditionExpression=Key('PK').eq(f'USER#{USER_ID}') & Key('SK').begins_with('CATEGORY#'),
         FilterExpression='parentCategoryId = :parent_id',
         ExpressionAttributeValues={':parent_id': category_id}
     ).get('Items', [])
+    if category and category.get('type') == 'business':
+        children += table.query(
+            KeyConditionExpression=Key('PK').eq(f'USER#{USER_ID}') & Key('SK').begins_with('CATEGORY#'),
+            FilterExpression='businessId = :business_id',
+            ExpressionAttributeValues={':business_id': category_id}
+        ).get('Items', [])
+        transactions = table.query(
+            KeyConditionExpression=Key('PK').eq(f'USER#{USER_ID}') & Key('SK').begins_with('TRANSACTION#'),
+            FilterExpression='businessId = :business_id',
+            ExpressionAttributeValues={':business_id': category_id}
+        ).get('Items', [])
+        if transactions:
+            return cors_response(409, {'error': "Delete this business's transactions before deleting it"})
     if children:
         return cors_response(409, {'error': "Delete this category's subcategories before deleting the category"})
 
@@ -587,7 +936,26 @@ def delete_category(category_id):
 
 # ============= TRANSACTION FUNCTIONS =============
 
-def get_transactions(month=None):
+def validate_transaction_category(category_id, transaction_type, business_id=None):
+    """Ensure transactions use a category in the correct personal or business ledger."""
+    category = table.get_item(
+        Key={'PK': f'USER#{USER_ID}', 'SK': f'CATEGORY#{category_id}'}
+    ).get('Item')
+    if not category or category.get('type') != transaction_type:
+        raise ValueError('Select a category matching the transaction type')
+
+    if business_id:
+        business = table.get_item(
+            Key={'PK': f'USER#{USER_ID}', 'SK': f'CATEGORY#{business_id}'}
+        ).get('Item')
+        if not business or business.get('type') != 'business' or category.get('businessId') != business_id:
+            raise ValueError('Select a category belonging to this business')
+    elif category.get('businessId') or category.get('type') == 'business':
+        raise ValueError('Business categories must be used in the business ledger')
+
+    return category
+
+def get_transactions(month=None, business_id=None):
     """Get transactions, optionally filtered by month"""
     if month:
         # Query using GSI for specific month
@@ -602,6 +970,10 @@ def get_transactions(month=None):
         )
 
     transactions = response.get('Items', [])
+    if business_id:
+        transactions = [txn for txn in transactions if txn.get('businessId') == business_id]
+    else:
+        transactions = [txn for txn in transactions if not txn.get('businessId')]
     # Sort by date descending
     transactions.sort(key=lambda x: x.get('date', ''), reverse=True)
 
@@ -609,6 +981,8 @@ def get_transactions(month=None):
 
 def add_transaction(body):
     """Add a new transaction"""
+    business_id = body.get('businessId')
+    validate_transaction_category(body['categoryId'], body['type'], business_id)
     transaction_id = str(uuid.uuid4())[:8]
     timestamp = datetime.now().isoformat()
     date = body.get('date', datetime.now().strftime('%Y-%m-%d'))
@@ -629,6 +1003,8 @@ def add_transaction(body):
         'month': month,
         'createdAt': timestamp
     }
+    if business_id:
+        item['businessId'] = business_id
 
     table.put_item(Item=item)
 
@@ -641,15 +1017,34 @@ def update_transaction(body):
     """Update an existing transaction"""
     transaction_id = body['transactionId']
     sk = body['SK']  # Need the full SK to update
+    existing = table.get_item(
+        Key={'PK': f'USER#{USER_ID}', 'SK': sk}
+    ).get('Item')
+    if not existing or existing.get('transactionId') != transaction_id:
+        return cors_response(404, {'error': 'Transaction not found'})
+    business_id = existing.get('businessId')
+    if body.get('businessId') != business_id:
+        raise ValueError('A transaction cannot be moved between personal and business ledgers')
+    validate_transaction_category(body['categoryId'], existing['type'], business_id)
 
-    update_expr = "SET amount = :amount, categoryId = :catId, categoryName = :catName, description = :desc, #d = :date"
+    date = body.get('date', datetime.now().strftime('%Y-%m-%d'))
+    month = date[:7]
+    timestamp = sk.split('#', 2)[1]
+    update_expr = (
+        "SET amount = :amount, categoryId = :catId, categoryName = :catName, "
+        "description = :desc, #d = :date, month = :month, "
+        "GSI1PK = :month_pk, GSI1SK = :month_sk"
+    )
     expr_attr_names = {'#d': 'date'}
     expr_attr_values = {
         ':amount': Decimal(str(body['amount'])),
         ':catId': body['categoryId'],
         ':catName': body.get('categoryName', ''),
         ':desc': body.get('description', ''),
-        ':date': body.get('date', datetime.now().strftime('%Y-%m-%d'))
+        ':date': date,
+        ':month': month,
+        ':month_pk': f'USER#{USER_ID}#MONTH#{month}',
+        ':month_sk': f'TRANSACTION#{timestamp}'
     }
 
     table.update_item(
@@ -660,7 +1055,9 @@ def update_transaction(body):
     )
 
     # Update monthly summary
-    month = body.get('date', datetime.now().strftime('%Y-%m-%d'))[:7]
+    old_month = existing.get('month', existing.get('date', date)[:7])
+    if old_month != month:
+        update_monthly_summary(old_month)
     update_monthly_summary(month)
 
     return cors_response(200, {'message': 'Transaction updated'})
@@ -712,6 +1109,8 @@ def get_monthly_summary(month):
     category_spending = {}
 
     for txn in transactions:
+        if txn.get('businessId'):
+            continue
         amount = txn.get('amount', Decimal('0'))
         category_id = txn.get('categoryId', 'unknown')
 

@@ -51,10 +51,14 @@ async function deleteCategory(categoryId) {
 }
 
 // Transactions API
-async function getTransactions(month = null) {
+async function getTransactions(month = null, businessId = null) {
     let endpoint = API_CONFIG.endpoints.transactions;
-    if (month) {
-        endpoint += `?month=${month}`;
+    const query = new URLSearchParams();
+    if (month) query.set('month', month);
+    if (businessId) query.set('businessId', businessId);
+    const queryString = query.toString();
+    if (queryString) {
+        endpoint += `?${queryString}`;
     }
     return await apiRequest(endpoint);
 }
@@ -94,6 +98,26 @@ async function deleteTodo(todoData) {
 
 async function markTodoHalfDone(todoData) {
     return await apiRequest('/api/todos/half-done', 'POST', todoData);
+}
+
+async function getRepeatTodos(date) {
+    return await apiRequest(`/api/todos/repeat?date=${encodeURIComponent(date)}`);
+}
+
+async function addRepeatTodo(todoData) {
+    return await apiRequest('/api/todos/repeat', 'POST', todoData);
+}
+
+async function updateRepeatTodo(todoData) {
+    return await apiRequest('/api/todos/repeat', 'PUT', todoData);
+}
+
+async function deleteRepeatTodo(todoData) {
+    return await apiRequest('/api/todos/repeat', 'DELETE', todoData);
+}
+
+async function updateRepeatTodoStatus(todoData) {
+    return await apiRequest('/api/todos/repeat/status', 'PUT', todoData);
 }
 
 // Summary API

@@ -63,10 +63,15 @@
 - ✅ Icon + Name display
 - ✅ Monthly limit display (for expenses)
 - ✅ Color-coded borders
+- ✅ Businesses appear as compact expandable rows with monthly income and expense totals
+- ✅ The Dashboard shows a separate expandable business overview for its selected month
+- ✅ Each business has its own income and expense categories and transaction ledger
+- ✅ Business entries are kept out of personal totals, budgets, history, and reports
 
 **Add Category**
 - ✅ Custom name
-- ✅ Type selection (Income/Expense)
+- ✅ Type selection (Income/Expense/Business)
+- ✅ Assign income and expense categories to a business
 - ✅ Monthly limit setting
 - ✅ Icon picker (emoji)
 - ✅ Color picker
@@ -88,7 +93,10 @@
 - ✅ Mark tasks open, half done, or completed with clear visual status colors
 - ✅ Marking a task half done offers an editable continuation task on a chosen date; it is never carried forward automatically
 - ✅ Optional, initially hidden checkpoints with up to 5 per task
-- ✅ Previous-month reward summary: ₹100 × completed tasks ÷ that person's total tasks, when that person had at least 4 tasks that day
+- ✅ Weekly repeat tasks can be assigned to any combination of weekdays and managed separately for Hubby and Wifey
+- ✅ On the repeat-task page, tasks due today are grouped above tasks scheduled for other days
+- ✅ Repeat task completion is tracked per scheduled day; schedule edits take effect today and future occurrences
+- ✅ Month-to-date rewards combine regular task rewards (minimum 4 tasks/day) and repeat-task rewards (minimum 5 scheduled repeat tasks/day), each prorated from ₹100 by the completed share
 - ✅ Reward is displayed only and is not added to expense or income transactions
 
 ### 6. Monthly Summary & Carryover 📅

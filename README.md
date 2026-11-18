@@ -29,13 +29,14 @@ aws configure
 ### Core Functionality
 - ✅ **Track Expenses & Income** - Daily transaction tracking with descriptions
 - ✅ **Category Management** - Add/edit/delete categories with custom icons & colors
+- ✅ **Business Ledgers** - Create businesses with separate income/expense categories and transaction history; business activity stays out of personal totals
 - ✅ **Monthly Limits** - Set and track spending limits per category
 - ✅ **Visual Dashboard** - See income, expenses, balance, and category breakdowns
 - ✅ **Carryover Balance** - Automatic month-to-month balance tracking
 - ✅ **Transaction History** - View, filter, edit, and delete any transaction
 - ✅ **Monthly Summaries** - Automatic calculation of monthly totals
-- ✅ **Household Todo List** - Shared daily lists, optional checkpoints, calendar history/planning, and previous-month rewards
-- Todo rewards are calculated on the Todo page only (₹100 × completed tasks ÷ that person's tasks, minimum 4 tasks that day); they never change expense or income transactions.
+- ✅ **Household Todo List** - Shared daily lists, weekly repeat tasks, optional checkpoints, calendar history/planning, and month-to-date rewards
+- Todo rewards are calculated on the Todo page only: regular tasks qualify at 4 tasks/day and repeat tasks at 5 scheduled tasks/day; each reward is ₹100 × completed ÷ total tasks. They never change expense or income transactions.
 
 ### Your Pre-configured Categories
 
@@ -114,6 +115,8 @@ are not guaranteed to be free. Check the AWS Billing console regularly.
 - Add an expense from a category or subcategory.
 - Review monthly totals, category budgets, daily spending, and transaction history.
 - Manage categories and budgets from the dashboard.
+- Create a business from **Categories → + Add Category → Business**. Add that business’s income/expense categories, then open its row to record and review business transactions separately from personal totals.
+- The Dashboard also shows a separate expandable Businesses section with the selected month’s business income and expense totals.
 
 ### Update After Code Changes
 ```bash
