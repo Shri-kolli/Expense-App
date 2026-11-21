@@ -51,11 +51,12 @@ async function deleteCategory(categoryId) {
 }
 
 // Transactions API
-async function getTransactions(month = null, businessId = null) {
+async function getTransactions(month = null, businessId = null, includeBusiness = false) {
     let endpoint = API_CONFIG.endpoints.transactions;
     const query = new URLSearchParams();
     if (month) query.set('month', month);
     if (businessId) query.set('businessId', businessId);
+    if (includeBusiness) query.set('includeBusiness', 'true');
     const queryString = query.toString();
     if (queryString) {
         endpoint += `?${queryString}`;
@@ -102,6 +103,10 @@ async function markTodoHalfDone(todoData) {
 
 async function getRepeatTodos(date) {
     return await apiRequest(`/api/todos/repeat?date=${encodeURIComponent(date)}`);
+}
+
+async function getRepeatTodosForMonth(month) {
+    return await apiRequest(`/api/todos/repeat?month=${encodeURIComponent(month)}`);
 }
 
 async function addRepeatTodo(todoData) {

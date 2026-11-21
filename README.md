@@ -116,7 +116,8 @@ are not guaranteed to be free. Check the AWS Billing console regularly.
 - Review monthly totals, category budgets, daily spending, and transaction history.
 - Manage categories and budgets from the dashboard.
 - Create a business from **Categories → + Add Category → Business**. Add that business’s income/expense categories, then open its row to record and review business transactions separately from personal totals.
-- The Dashboard also shows a separate expandable Businesses section with the selected month’s business income and expense totals.
+- The Dashboard also shows a separate expandable Businesses section with all-time business income and expense totals. These totals do not reset or change with the personal month selector.
+- Business entries also appear in Transaction History, identified by business name, and can be added from the shared Add Transaction form by choosing a business ledger.
 
 ### Update After Code Changes
 ```bash

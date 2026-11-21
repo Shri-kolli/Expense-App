@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Personal Expense Tracker</title>
-    <link rel="stylesheet" href="css/style.css?v=20261118-2">
+    <link rel="stylesheet" href="css/style.css?v=20261122-1">
 </head>
 <body>
     <main id="authScreen" class="auth-screen">
@@ -57,13 +57,13 @@
             </div>
 
             <div class="category-spending">
-                <h2>Categories &amp; Budgets</h2>
+                <h2>Personal expense categories &amp; budgets</h2>
                 <div id="categoryBars"></div>
             </div>
 
             <section class="businesses-section" aria-labelledby="businessDashboardTitle">
                 <div class="businesses-dashboard-heading">
-                    <h2 id="businessDashboardTitle">Businesses</h2>
+                    <h2 id="businessDashboardTitle">Business income &amp; expenses</h2>
                     <span id="businessDashboardMonth"></span>
                 </div>
                 <div id="businessDashboard"></div>
@@ -127,9 +127,44 @@
                                 <option value="wifey">Wifey's tasks</option>
                             </select>
                         </label>
+                        <label for="todoDurationDays">
+                            Duration
+                            <select id="todoDurationDays" required>
+                                <option value="1">1 day</option>
+                                <option value="2">2 days</option>
+                                <option value="3">3 days</option>
+                                <option value="4">4 days</option>
+                                <option value="5">5 days</option>
+                                <option value="6">6 days</option>
+                                <option value="7">7 days</option>
+                                <option value="8">8 days</option>
+                                <option value="9">9 days</option>
+                                <option value="10">10 days</option>
+                                <option value="11">11 days</option>
+                                <option value="12">12 days</option>
+                                <option value="13">13 days</option>
+                                <option value="14">14 days</option>
+                                <option value="15">15 days</option>
+                                <option value="16">16 days</option>
+                                <option value="17">17 days</option>
+                                <option value="18">18 days</option>
+                                <option value="19">19 days</option>
+                                <option value="20">20 days</option>
+                                <option value="21">21 days</option>
+                                <option value="22">22 days</option>
+                                <option value="23">23 days</option>
+                                <option value="24">24 days</option>
+                                <option value="25">25 days</option>
+                                <option value="26">26 days</option>
+                                <option value="27">27 days</option>
+                                <option value="28">28 days</option>
+                                <option value="29">29 days</option>
+                                <option value="30">30 days</option>
+                            </select>
+                        </label>
                         <button type="submit" class="btn btn-primary todo-add-button">Add task</button>
                     </div>
-                    <p class="todo-muted">Up to 6 tasks per person each day. Pick a future date above to plan ahead.</p>
+                    <p class="todo-muted">Up to 6 tasks per person each day. Multi-day tasks count on every scheduled day.</p>
                     <p id="todoMessage" class="todo-message" role="status" hidden></p>
                 </form>
             </section>
@@ -158,6 +193,10 @@
                         <h2 id="repeatTodosTitle">Repeat tasks</h2>
                         <p id="repeatTodosDate" class="todo-muted"></p>
                     </div>
+                    <label class="todo-date-picker" for="repeatTodoDate">
+                        Choose a day
+                        <input type="date" id="repeatTodoDate">
+                    </label>
                 </div>
                 <div class="repeat-owner-sections">
                     <section class="repeat-owner-group todo-owner-wifey" aria-labelledby="repeatWifeyTitle">
@@ -185,6 +224,21 @@
                         </div>
                     </section>
                 </div>
+                <section class="todo-calendar-section" aria-labelledby="repeatTodoCalendarTitle">
+                    <div class="todo-calendar-heading">
+                        <h2 id="repeatTodoCalendarTitle">Repeat-Todo calendar</h2>
+                        <div class="calendar-month-controls">
+                            <button id="repeatTodoPreviousMonth" class="calendar-nav" type="button" aria-label="Previous month">‹</button>
+                            <span id="repeatTodoCalendarMonthLabel"></span>
+                            <button id="repeatTodoNextMonth" class="calendar-nav" type="button" aria-label="Next month">›</button>
+                        </div>
+                    </div>
+                    <div class="calendar-weekdays" aria-hidden="true">
+                        <span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span>
+                        <span>Fri</span><span>Sat</span><span>Sun</span>
+                    </div>
+                    <div id="repeatTodoCalendar" class="todo-calendar" role="grid" aria-label="Repeat-Todo days"></div>
+                </section>
             </section>
         </section>
 
@@ -197,6 +251,12 @@
                     <button id="leaveBusinessTransaction" type="button" class="btn btn-small">Use personal ledger</button>
                 </p>
                 <form id="transactionForm">
+                    <div class="form-group">
+                        <label for="transactionLedger">Ledger</label>
+                        <select id="transactionLedger" required>
+                            <option value="personal">Personal</option>
+                        </select>
+                    </div>
                     <div class="form-group">
                         <label>Type</label>
                         <div class="radio-group">
@@ -437,7 +497,7 @@
     <script src="js/auth-config.js"></script>
     <script src="js/auth.js"></script>
     <script src="js/config.js"></script>
-    <script src="js/api.js?v=20261118-2"></script>
-    <script src="js/app.js?v=20261118-2"></script>
+    <script src="js/api.js?v=20261122-1"></script>
+    <script src="js/app.js?v=20261122-1"></script>
 </body>
 </html>

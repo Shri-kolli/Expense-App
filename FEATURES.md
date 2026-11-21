@@ -64,8 +64,10 @@
 - ✅ Monthly limit display (for expenses)
 - ✅ Color-coded borders
 - ✅ Businesses appear as compact expandable rows with monthly income and expense totals
-- ✅ The Dashboard shows a separate expandable business overview for its selected month
+- ✅ The Dashboard shows all-time business income and expense totals, independent of the selected personal month
+- ✅ Personal expense categories and budgets exclude business-owned categories, with clear labels separating personal and business dashboard sections
 - ✅ Each business has its own income and expense categories and transaction ledger
+- ✅ Business transactions can be entered from the shared Add Transaction form and appear in Transaction History with the business identified
 - ✅ Business entries are kept out of personal totals, budgets, history, and reports
 
 **Add Category**
@@ -90,11 +92,14 @@
 
 - ✅ Shared Hubby and Wifey lists, with up to 6 tasks per person per day
 - ✅ Choose today, a past date, or a future date; the calendar opens tasks for the selected day
-- ✅ Mark tasks open, half done, or completed with clear visual status colors
+- ✅ Regular tasks can span 1–30 days, appear on each scheduled day, and track daily progress separately
+- ✅ Multi-day tasks can be marked done for a day or completely finished early; open tasks can be extended one day at a time on the final scheduled day, up to 30 days
+- ✅ Single-day tasks can be open, half done, or completed; multi-day tasks have separate daily done and completely finished actions
 - ✅ Marking a task half done offers an editable continuation task on a chosen date; it is never carried forward automatically
 - ✅ Optional, initially hidden checkpoints with up to 5 per task
 - ✅ Weekly repeat tasks can be assigned to any combination of weekdays and managed separately for Hubby and Wifey
 - ✅ On the repeat-task page, tasks due today are grouped above tasks scheduled for other days
+- ✅ Repeat tasks have their own date picker and calendar for selecting the schedule’s effective date
 - ✅ Repeat task completion is tracked per scheduled day; schedule edits take effect today and future occurrences
 - ✅ Month-to-date rewards combine regular task rewards (minimum 4 tasks/day) and repeat-task rewards (minimum 5 scheduled repeat tasks/day), each prorated from ₹100 by the completed share
 - ✅ Reward is displayed only and is not added to expense or income transactions

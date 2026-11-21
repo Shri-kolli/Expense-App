@@ -82,7 +82,11 @@ def lambda_handler(event, context):
         elif '/transactions' in raw_path:
             if method == 'GET':
                 query = event.get('queryStringParameters') or {}
-                return get_transactions(query.get('month'), query.get('businessId'))
+                return get_transactions(
+                    query.get('month'),
+                    query.get('businessId'),
+                    query.get('includeBusiness') == 'true'
+                )
             elif method == 'POST':
                 return add_transaction(body)
             elif method == 'PUT':
@@ -100,6 +104,8 @@ def lambda_handler(event, context):
                 return update_repeat_todo_status(body)
             if raw_path.endswith('/todos/repeat'):
                 if method == 'GET':
+                    if query.get('month'):
+                        return get_repeat_todo_calendar(query.get('month'))
                     return get_repeat_todos(query.get('date'))
                 if method == 'POST':
                     return add_repeat_todo(body)
@@ -162,6 +168,16 @@ def validate_todo_month(value):
         raise ValueError('Todo month must be a valid YYYY-MM month')
     return value
 
+def validate_todo_duration(value):
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, (int, Decimal))
+        or value != int(value)
+        or not 1 <= value <= 30
+    ):
+        raise ValueError('Todo duration must be between 1 and 30 days')
+    return int(value)
+
 def validate_todo_id(value):
     if not isinstance(value, str):
         raise ValueError('Todo ID is required')
@@ -180,6 +196,40 @@ def validate_todo_title(value, label='Todo title'):
 
 def todo_key(todo_date, todo_id):
     return {'PK': f'USER#{USER_ID}', 'SK': f'TODO#{todo_date}#{todo_id}'}
+
+def todo_end_date(todo):
+    duration = validate_todo_duration(todo.get('durationDays', 1))
+    start = datetime.strptime(todo['date'], '%Y-%m-%d')
+    return (start + timedelta(days=duration - 1)).strftime('%Y-%m-%d')
+
+def todo_dates(todo):
+    start = datetime.strptime(todo['date'], '%Y-%m-%d')
+    duration = validate_todo_duration(todo.get('durationDays', 1))
+    return [
+        (start + timedelta(days=offset)).strftime('%Y-%m-%d')
+        for offset in range(duration)
+    ]
+
+def todos_for_month(month):
+    first_of_month = datetime.strptime(validate_todo_month(month), '%Y-%m').date()
+    last_day_previous_month = first_of_month - timedelta(days=1)
+    previous_month = last_day_previous_month.strftime('%Y-%m')
+    month_before_previous = (
+        last_day_previous_month.replace(day=1) - timedelta(days=1)
+    ).strftime('%Y-%m')
+    items = (
+        query_todos(f'TODO#{month_before_previous}-')
+        + query_todos(f'TODO#{previous_month}-')
+        + query_todos(f'TODO#{month}-')
+    )
+    month_end = (first_of_month.replace(day=calendar.monthrange(
+        first_of_month.year, first_of_month.month
+    )[1])).strftime('%Y-%m-%d')
+    month_start = first_of_month.strftime('%Y-%m-%d')
+    return [
+        item for item in items
+        if item['date'] <= month_end and todo_end_date(item) >= month_start
+    ]
 
 def repeat_todo_key(todo_id):
     return {'PK': f'USER#{USER_ID}', 'SK': f'REPEATTASK#{todo_id}'}
@@ -286,28 +336,58 @@ def get_repeat_todos(todo_date):
     )
     return cors_response(200, {'date': todo_date, 'repeatTodos': daily_tasks})
 
+def get_repeat_todo_calendar(month):
+    month = validate_todo_month(month)
+    tasks = query_todos('REPEATTASK#')
+    completed_occurrences = {
+        item['SK']
+        for item in query_todos(f'REPEATDONE#{month}-')
+        if item.get('completed')
+    }
+    year, month_number = (int(part) for part in month.split('-'))
+    days_in_month = calendar.monthrange(year, month_number)[1]
+    days = {}
+    for day in range(1, days_in_month + 1):
+        task_date = f'{month}-{day:02d}'
+        scheduled = [
+            task for task in tasks
+            if task.get('active')
+            and (version := repeat_version_for_date(task, task_date))
+            and repeat_version_matches_date(version, task_date)
+        ]
+        completed = sum(
+            repeat_todo_status_key(task_date, task['repeatTaskId'])['SK'] in completed_occurrences
+            for task in scheduled
+        )
+        if scheduled:
+            days[task_date] = {'total': len(scheduled), 'completed': completed}
+    return cors_response(200, {'month': month, 'days': days})
+
 def get_todos(todo_date=None, month=None):
     if todo_date:
-        prefix = f'TODO#{validate_todo_date(todo_date)}#'
+        items = query_todos(f'TODO#{validate_todo_date(todo_date)}#')
     elif month:
-        prefix = f'TODO#{validate_todo_month(month)}-'
+        items = todos_for_month(month)
     else:
         raise ValueError('Provide a date or month to load todos')
 
-    items = query_todos(prefix)
     items.sort(key=lambda item: (item.get('owner', ''), item.get('createdAt', '')))
     return cors_response(200, {'todos': items})
 
 def get_todo_reward(month):
     month = validate_todo_month(month)
-    items = query_todos(f'TODO#{month}-')
+    items = todos_for_month(month)
     daily_owner_counts = {}
     for item in items:
-        key = (item['date'], item['owner'])
-        counts = daily_owner_counts.setdefault(key, {'total': 0, 'completed': 0})
-        counts['total'] += 1
-        if item.get('status') == 'completed':
-            counts['completed'] += 1
+        for task_date in todo_dates(item):
+            if task_date[:7] != month:
+                continue
+            key = (task_date, item['owner'])
+            counts = daily_owner_counts.setdefault(key, {'total': 0, 'completed': 0})
+            counts['total'] += 1
+            daily_done = item.get('dailyStatuses', {}).get(task_date, False)
+            if daily_done or item.get('status') == 'completed':
+                counts['completed'] += 1
 
     owner_rewards = {'hubby': Decimal('0'), 'wifey': Decimal('0')}
     regular_rewards = {'hubby': Decimal('0'), 'wifey': Decimal('0')}
@@ -513,6 +593,7 @@ def update_repeat_todo_status(body):
 def add_todo(body):
     title = validate_todo_title(body.get('title'))
     todo_date = validate_todo_date(body.get('date'))
+    duration = validate_todo_duration(body.get('durationDays', 1))
     owner = body.get('owner')
     if owner not in TODO_OWNERS:
         raise ValueError('Todo owner must be hubby or wifey')
@@ -525,13 +606,18 @@ def add_todo(body):
         'title': title,
         'owner': owner,
         'date': todo_date,
+        'durationDays': duration,
         'status': 'open',
         'subtasks': [],
+        'dailyStatuses': {},
         'createdAt': now,
         'updatedAt': now
     }
-    transact_todo_write([
-        reserve_todo_slot(todo_date, owner),
+    operations = [
+        reserve_todo_slot(task_date, owner)
+        for task_date in todo_dates(item)
+    ]
+    operations.extend([
         {
             'Put': {
                 'TableName': table.name,
@@ -539,12 +625,136 @@ def add_todo(body):
                 'ConditionExpression': 'attribute_not_exists(PK) AND attribute_not_exists(SK)'
             }
         }
-    ], f'{owner.title()} already has {TODO_DAILY_LIMIT} tasks for this day')
+    ])
+    transact_todo_write(
+        operations,
+        f'{owner.title()} already has {TODO_DAILY_LIMIT} tasks on one of those days'
+    )
     return cors_response(201, {'todo': item})
+
+def update_todo_duration(key, todo, duration):
+    task_date = todo_end_date(todo)
+    next_date = (
+        datetime.strptime(task_date, '%Y-%m-%d') + timedelta(days=1)
+    ).strftime('%Y-%m-%d')
+    now = datetime.now().isoformat()
+    operations = [reserve_todo_slot(next_date, todo['owner'])]
+    operations.append({
+        'Update': {
+            'TableName': table.name,
+            'Key': {name: serializer.serialize(value) for name, value in key.items()},
+            'UpdateExpression': 'SET durationDays = :duration, updatedAt = :updated',
+            'ConditionExpression': (
+                'attribute_exists(PK) AND updatedAt = :previous '
+                'AND (attribute_not_exists(#status) OR #status = :open)'
+            ),
+            'ExpressionAttributeNames': {'#status': 'status'},
+            'ExpressionAttributeValues': {
+                ':duration': {'N': str(duration + 1)},
+                ':updated': {'S': now},
+                ':previous': {'S': todo['updatedAt']},
+                ':open': {'S': 'open'}
+            }
+        }
+    })
+    transact_todo_write(
+        operations,
+        'This todo changed, is already completed, or the added day has reached its daily limit'
+    )
+    updated = {**todo, 'durationDays': duration + 1, 'updatedAt': now}
+    return cors_response(200, {'todo': updated})
+
+def update_todo_daily_status(todo, key, day_date, done):
+    day_date = validate_todo_date(day_date)
+    if day_date not in todo_dates(todo):
+        raise ValueError('The selected date is outside this todo’s scheduled days')
+    if not isinstance(done, bool):
+        raise ValueError('Daily completion must be true or false')
+    if todo.get('status') == 'completed':
+        raise TodoConflictError('Reopen the completed task before changing daily progress')
+
+    daily_statuses = dict(todo.get('dailyStatuses') or {})
+    if done:
+        daily_statuses[day_date] = True
+    else:
+        daily_statuses.pop(day_date, None)
+    now = datetime.now().isoformat()
+    try:
+        updated = table.update_item(
+            Key=key,
+            UpdateExpression='SET dailyStatuses = :statuses, updatedAt = :updated',
+            ConditionExpression='attribute_exists(PK) AND updatedAt = :previous',
+            ExpressionAttributeValues={
+                ':statuses': daily_statuses,
+                ':updated': now,
+                ':previous': todo['updatedAt']
+            },
+            ReturnValues='ALL_NEW'
+        )['Attributes']
+    except ClientError as error:
+        if error.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
+            raise TodoConflictError('This todo changed. Refresh and try again') from error
+        raise
+    return cors_response(200, {'todo': updated})
 
 def update_todo(body):
     todo_date = validate_todo_date(body.get('date'))
     todo_id = validate_todo_id(body.get('todoId'))
+    key = todo_key(todo_date, todo_id)
+    todo = table.get_item(Key=key).get('Item')
+    if not todo:
+        return cors_response(404, {'error': 'Todo not found'})
+    duration = validate_todo_duration(todo.get('durationDays', 1))
+
+    if 'extendByDays' in body:
+        if body['extendByDays'] != 1:
+            raise ValueError('Todos can only be extended one day at a time')
+        if duration >= 30:
+            raise ValueError('Beyond 30 days not allowed')
+        if todo.get('status') != 'open':
+            raise ValueError('Only an open todo can be extended')
+        return update_todo_duration(key, todo, duration)
+
+    if 'dayDate' in body:
+        if duration == 1:
+            raise ValueError('Daily progress is only available for multi-day todos')
+        return update_todo_daily_status(todo, key, body['dayDate'], body.get('dayDone'))
+
+    if 'status' in body and duration > 1:
+        completion_date = validate_todo_date(body.get('completionDate'))
+        if completion_date not in todo_dates(todo):
+            raise ValueError('The selected date is outside this todo’s scheduled days')
+        if body['status'] not in ('open', 'completed'):
+            raise ValueError('Todo status must be open or completed')
+        if body['status'] == todo.get('status'):
+            return cors_response(200, {'todo': todo})
+        now = datetime.now().isoformat()
+        expression = (
+            'SET #status = :status, updatedAt = :updated REMOVE completedOn'
+            if body['status'] == 'open'
+            else 'SET #status = :status, completedOn = :completionDate, updatedAt = :updated'
+        )
+        values = {
+            ':status': body['status'],
+            ':updated': now,
+            ':previous': todo['updatedAt']
+        }
+        if body['status'] == 'completed':
+            values[':completionDate'] = completion_date
+        try:
+            updated = table.update_item(
+                Key=key,
+                UpdateExpression=expression,
+                ConditionExpression='attribute_exists(PK) AND updatedAt = :previous',
+                ExpressionAttributeNames={'#status': 'status'},
+                ExpressionAttributeValues=values,
+                ReturnValues='ALL_NEW'
+            )['Attributes']
+        except ClientError as error:
+            if error.response.get('Error', {}).get('Code') == 'ConditionalCheckFailedException':
+                raise TodoConflictError('This todo changed. Refresh and try again') from error
+            raise
+        return cors_response(200, {'todo': updated})
 
     updates = []
     names = {}
@@ -584,7 +794,7 @@ def update_todo(body):
     updates.append('updatedAt = :updated')
     try:
         response = table.update_item(
-            Key=todo_key(todo_date, todo_id),
+            Key=key,
             UpdateExpression='SET ' + ', '.join(updates),
             ConditionExpression='attribute_exists(PK)',
             ExpressionAttributeNames=names,
@@ -611,25 +821,34 @@ def delete_todo(body):
     if existing.get('owner') != owner:
         raise ValueError('Todo owner does not match')
 
-    transact_todo_write([
-        {
+    operations = []
+    for task_date in todo_dates(existing):
+        operations.append({
             'Update': {
                 'TableName': table.name,
-                'Key': todo_counter_key(todo_date, owner),
+                'Key': todo_counter_key(task_date, owner),
                 'UpdateExpression': 'SET #taskCount = #taskCount - :one',
                 'ConditionExpression': '#taskCount >= :one',
                 'ExpressionAttributeNames': {'#taskCount': 'taskCount'},
                 'ExpressionAttributeValues': {':one': {'N': '1'}}
             }
-        },
+        })
+    operations.extend([
         {
             'Delete': {
                 'TableName': table.name,
                 'Key': {name: serializer.serialize(value) for name, value in key.items()},
-                'ConditionExpression': 'attribute_exists(PK)'
+                'ConditionExpression': 'attribute_exists(PK) AND updatedAt = :previous',
+                'ExpressionAttributeValues': {
+                    ':previous': serializer.serialize(existing['updatedAt'])
+                }
             }
         }
-    ], 'This todo changed while it was being deleted. Refresh and try again')
+    ])
+    transact_todo_write(
+        operations,
+        'This todo changed while it was being deleted. Refresh and try again'
+    )
     return cors_response(200, {'message': 'Todo deleted'})
 
 def mark_todo_half_done(body):
@@ -641,6 +860,8 @@ def mark_todo_half_done(body):
     original = table.get_item(Key=key).get('Item')
     if not original:
         return cors_response(404, {'error': 'Todo not found'})
+    if validate_todo_duration(original.get('durationDays', 1)) > 1:
+        raise ValueError('Multi-day todos cannot be marked half done')
     if original.get('status') != 'open':
         raise TodoConflictError('Only an open todo can be marked half done')
 
@@ -955,7 +1176,7 @@ def validate_transaction_category(category_id, transaction_type, business_id=Non
 
     return category
 
-def get_transactions(month=None, business_id=None):
+def get_transactions(month=None, business_id=None, include_business=False):
     """Get transactions, optionally filtered by month"""
     if month:
         # Query using GSI for specific month
@@ -972,7 +1193,7 @@ def get_transactions(month=None, business_id=None):
     transactions = response.get('Items', [])
     if business_id:
         transactions = [txn for txn in transactions if txn.get('businessId') == business_id]
-    else:
+    elif not include_business:
         transactions = [txn for txn in transactions if not txn.get('businessId')]
     # Sort by date descending
     transactions.sort(key=lambda x: x.get('date', ''), reverse=True)
